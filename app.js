@@ -6,10 +6,8 @@ require('dotenv').config();
 const notFound = require('./middleware/not-found');
 const errorHandler = require('./middleware/error-handler');
 
-// middleware
 app.use(express.json())
 
-// routes
 app.use('/api/entries', entries);
 
 app.use(notFound);

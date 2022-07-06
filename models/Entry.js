@@ -5,21 +5,27 @@ const EntrySchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    maxlength: [20, 'Name cannot be more than 20 characters']
+    maxlength: 20
   },
   to: {
     type: String,
     required: true,
     trim: true,
-    maxlength: [20, 'Name cannot be more than 20 characters']
+    maxlength: 20
   },
   amount: {
     type: Number,
     required: true,
     min: 0
   },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: 300
+  },
   date: {
     type: Date,
+    reuired: true,
     default: Date.now
   }
 });

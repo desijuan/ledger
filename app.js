@@ -1,17 +1,21 @@
+require('dotenv').config();
+require('express-async-errors');
+
 const express = require('express');
 const app = express();
-const entries = require('./routes/entries');
+
 const connectDB = require('./db/connect');
-require('dotenv').config();
-const notFound = require('./middleware/not-found');
-const errorHandler = require('./middleware/error-handler');
+const entriesRouter = require('./routes/entries');
+
+const notFoundMiddleware = require('./middleware/not-found');
+const errorMiddleware = require('./middleware/error-handler');
 
 app.use(express.json())
 
-app.use('/api/entries', entries);
+app.use('/api/entries', entriesRouter);
 
-app.use(notFound);
-app.use(errorHandler);
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
 
 const port = process.env.PORT || 3000;
 
@@ -25,4 +29,3 @@ const start = async () => {
 };
 
 start();
-

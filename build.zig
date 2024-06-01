@@ -16,7 +16,11 @@ pub fn build(b: *std.Build) void {
     //
     // - SQLite3 -
     //
-    exe.linkSystemLibrary("sqlite3");
+    exe.addIncludePath(.{ .path = "sqlite3" });
+    exe.addCSourceFile(.{
+        .file = .{ .path = "sqlite3/sqlite3.c" },
+        .flags = &.{},
+    });
 
     //
     // - libmicrohttpd -

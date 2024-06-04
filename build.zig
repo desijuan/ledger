@@ -25,7 +25,49 @@ pub fn build(b: *std.Build) void {
     //
     // - libmicrohttpd -
     //
-    exe.linkSystemLibrary("microhttpd");
+    exe.linkSystemLibrary("pthread");
+    exe.linkSystemLibrary("gnutls");
+    exe.addIncludePath(.{ .path = "microhttpd" });
+    exe.addIncludePath(.{ .path = "microhttpd/include" });
+    exe.addCSourceFiles(.{
+        .root = .{ .path = "microhttpd" },
+        .files = &[_][]const u8{
+            "basicauth.c",
+            "connection.c",
+            "connection_https.c",
+            "daemon.c",
+            "digestauth.c",
+            "gen_auth.c",
+            "internal.c",
+            "md5_ext.c",
+            "memorypool.c",
+            "mhd_compat.c",
+            "mhd_itc.c",
+            "mhd_mono_clock.c",
+            "mhd_panic.c",
+            "mhd_send.c",
+            "mhd_sockets.c",
+            "mhd_str.c",
+            "mhd_threads.c",
+            "postprocessor.c",
+            "reason_phrase.c",
+            "response.c",
+            "sha1.c",
+            "sha256_ext.c",
+            "sha512_256.c",
+            "sysfdsetsize.c",
+            "tsearch.c",
+        },
+        .flags = &[_][]const u8{
+            "-DHAVE_CONFIG_H",
+            "-D_GNU_SOURCE",
+            "-D_XOPEN_SOURCE=700",
+            "-fno-strict-aliasing",
+            "-fvisibility=hidden",
+            "-pthread",
+            "-g",
+        },
+    });
 
     b.installArtifact(exe);
 

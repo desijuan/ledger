@@ -29,12 +29,9 @@ pub fn open(self: *const Self) !void {
         );
         _ = c.sqlite3_close(self.db_p.*);
         return error.DBError;
-    } else {
-        std.log.info(
-            "Successfully opened the database: {s}",
-            .{self.file_name},
-        );
     }
+
+    std.log.info("Successfully opened the database: {s}", .{self.file_name});
 }
 
 pub fn close(self: *const Self) !void {
@@ -44,12 +41,9 @@ pub fn close(self: *const Self) !void {
             .{ self.file_name, c.sqlite3_errmsg(self.db_p.*) },
         );
         return error.DBError;
-    } else {
-        std.log.info(
-            "Successfully closed the database: {s}",
-            .{self.file_name},
-        );
     }
+
+    std.log.info("Successfully closed the database: {s}", .{self.file_name});
 }
 
 pub fn initGroupsTable(self: *const Self) !void {
@@ -87,10 +81,7 @@ pub fn initGroupsTable(self: *const Self) !void {
         return error.DBError;
     }
 
-    std.log.info(
-        "Initialized groups table",
-        .{},
-    );
+    std.log.info("Initialized groups table", .{});
 }
 
 pub fn isGroupIdValid(self: *const Self, group_id: u32) !bool {
@@ -122,16 +113,16 @@ pub fn isGroupIdValid(self: *const Self, group_id: u32) !bool {
 
     const rc = c.sqlite3_step(stmt);
 
-    return if (rc == c.SQLITE_DONE)
-        false
-    else if (rc == c.SQLITE_ROW)
-        true
-    else blk: {
-        std.log.err(
-            "Error stepping sql statement\n{s}\n{s}",
-            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
-        );
-        break :blk error.DBError;
+    return switch (rc) {
+        c.SQLITE_DONE => false,
+        c.SQLITE_ROW => true,
+        else => blk: {
+            std.log.err(
+                "Error stepping sql statement\n{s}\n{s}",
+                .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+            );
+            break :blk error.DBError;
+        },
     };
 }
 
@@ -164,16 +155,16 @@ pub fn isMemberIdValid(self: *const Self, group_id: u32, member_id: i64) !bool {
 
     const rc = c.sqlite3_step(stmt);
 
-    return if (rc == c.SQLITE_DONE)
-        false
-    else if (rc == c.SQLITE_ROW)
-        true
-    else blk: {
-        std.log.err(
-            "Error stepping sql statement\n{s}\n{s}",
-            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
-        );
-        break :blk error.DBError;
+    return switch (rc) {
+        c.SQLITE_DONE => false,
+        c.SQLITE_ROW => true,
+        else => blk: {
+            std.log.err(
+                "Error stepping sql statement\n{s}\n{s}",
+                .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+            );
+            break :blk error.DBError;
+        },
     };
 }
 
@@ -206,16 +197,16 @@ pub fn isTrIdValid(self: *const Self, group_id: u32, tr_id: i64) !bool {
 
     const rc = c.sqlite3_step(stmt);
 
-    return if (rc == c.SQLITE_DONE)
-        false
-    else if (rc == c.SQLITE_ROW)
-        true
-    else blk: {
-        std.log.err(
-            "Error stepping sql statement\n{s}\n{s}",
-            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
-        );
-        break :blk error.DBError;
+    return switch (rc) {
+        c.SQLITE_DONE => false,
+        c.SQLITE_ROW => true,
+        else => blk: {
+            std.log.err(
+                "Error stepping sql statement\n{s}\n{s}",
+                .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+            );
+            break :blk error.DBError;
+        },
     };
 }
 
@@ -254,36 +245,38 @@ pub fn getGroupInfo(self: *const Self, group_id: u32) !?*const GroupInfo {
 
     const rc = c.sqlite3_step(stmt);
 
-    return if (rc == c.SQLITE_DONE)
-        null
-    else if (rc == c.SQLITE_ROW) blk: {
-        const groupInfo = try self.alloc.create(GroupInfo);
-        errdefer self.alloc.destroy(groupInfo);
+    return switch (rc) {
+        c.SQLITE_DONE => null,
+        c.SQLITE_ROW => blk: {
+            const groupInfo = try self.alloc.create(GroupInfo);
+            errdefer self.alloc.destroy(groupInfo);
 
-        groupInfo.group_id = group_id;
+            groupInfo.group_id = group_id;
 
-        const name = try std.fmt.allocPrint(
-            self.alloc.*,
-            "{s}",
-            .{c.sqlite3_column_text(stmt, 0)},
-        );
-        errdefer self.alloc.free(name);
+            const name = try std.fmt.allocPrint(
+                self.alloc.*,
+                "{s}",
+                .{c.sqlite3_column_text(stmt, 0)},
+            );
+            errdefer self.alloc.free(name);
 
-        groupInfo.name = name;
+            groupInfo.name = name;
 
-        groupInfo.description = try std.fmt.allocPrint(
-            self.alloc.*,
-            "{s}",
-            .{c.sqlite3_column_text(stmt, 1)},
-        );
+            groupInfo.description = try std.fmt.allocPrint(
+                self.alloc.*,
+                "{s}",
+                .{c.sqlite3_column_text(stmt, 1)},
+            );
 
-        break :blk groupInfo;
-    } else blk: {
-        std.log.err(
-            "Error stepping sql statement\n{s}\n{s}",
-            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
-        );
-        break :blk error.DBError;
+            break :blk groupInfo;
+        },
+        else => blk: {
+            std.log.err(
+                "Error stepping sql statement\n{s}\n{s}",
+                .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+            );
+            break :blk error.DBError;
+        },
     };
 }
 
@@ -321,27 +314,29 @@ pub fn getMemberInfo(self: *const Self, group_id: u32, member_id: i64) !?Member 
 
     const rc = c.sqlite3_step(stmt);
 
-    return if (rc == c.SQLITE_DONE)
-        null
-    else if (rc == c.SQLITE_ROW) blk: {
-        const member = try self.alloc.create(Member);
-        errdefer self.alloc.destroy(member);
+    return switch (rc) {
+        c.SQLITE_DONE => null,
+        c.SQLITE_ROW => blk: {
+            const member = try self.alloc.create(Member);
+            errdefer self.alloc.destroy(member);
 
-        member.member_id = member_id;
+            member.member_id = member_id;
 
-        member.name = try std.fmt.allocPrint(
-            self.alloc.*,
-            "{s}",
-            .{c.sqlite3_column_text(stmt, 0)},
-        );
+            member.name = try std.fmt.allocPrint(
+                self.alloc.*,
+                "{s}",
+                .{c.sqlite3_column_text(stmt, 0)},
+            );
 
-        break :blk member;
-    } else blk: {
-        std.log.err(
-            "Error stepping sql statement\n{s}\n{s}",
-            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
-        );
-        break :blk error.DBError;
+            break :blk member;
+        },
+        else => blk: {
+            std.log.err(
+                "Error stepping sql statement\n{s}\n{s}",
+                .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+            );
+            break :blk error.DBError;
+        },
     };
 }
 
@@ -618,10 +613,7 @@ fn createMembersTable(self: *const Self, group_id: u32) !void {
         return error.DBError;
     }
 
-    std.log.info(
-        "Initialized members table for group {x}",
-        .{group_id},
-    );
+    std.log.info("Initialized members table for group {x}", .{group_id});
 }
 
 fn addMember(self: *const Self, group_id: u32, name: []const u8) !i64 {
@@ -672,10 +664,7 @@ fn addMember(self: *const Self, group_id: u32, name: []const u8) !i64 {
 
     const member_id: i64 = @intCast(c.sqlite3_last_insert_rowid(self.db_p.*));
 
-    std.log.info(
-        "New Member [id: {d}, name: {s}]",
-        .{ member_id, name },
-    );
+    std.log.info("New Member [id: {d}, name: {s}]", .{ member_id, name });
 
     return member_id;
 }
@@ -720,10 +709,7 @@ fn createTrsTable(self: *const Self, group_id: u32) !void {
         return error.DBError;
     }
 
-    std.log.info(
-        "Initialized transactions table for group {x}",
-        .{group_id},
-    );
+    std.log.info("Initialized transactions table for group {x}", .{group_id});
 }
 
 fn addTr(

@@ -6,11 +6,21 @@ pub const Ctx = struct {
     db: *const DB,
 };
 
-pub fn errorHandler(_: *const Ctx, req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
-    res.status = 500;
-    res.content_type = .TEXT;
-    res.body = "Internal Server Error";
-    std.log.err("httpz: unhandled exception for request: {s}\nError: {}", .{ req.url.raw, err });
+pub fn errorHandler(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
+    return switch (err) {
+        error.InvalidCharacter,
+        error.InvalidGroupId,
+        error.InvalidMemberId,
+        error.InvalidTrId,
+        => notFound(ctx, req, res) catch {},
+
+        else => {
+            res.status = 500;
+            res.content_type = .TEXT;
+            res.body = "Internal Server Error";
+            std.log.err("httpz: unhandled exception for request: {s}\nError: {}", .{ req.url.raw, err });
+        },
+    };
 }
 
 pub fn notFound(_: *const Ctx, _: *httpz.Request, res: *httpz.Response) !void {

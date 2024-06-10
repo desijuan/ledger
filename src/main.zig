@@ -1,6 +1,9 @@
 const std = @import("std");
+const httpz = @import("httpz");
 const DB = @import("db.zig");
-const MHD = @import("mhd.zig");
+const Handler = @import("handler.zig");
+
+const Ctx = Handler.Ctx;
 
 pub const std_options = std.Options{
     .log_level = .info,
@@ -9,11 +12,11 @@ pub const std_options = std.Options{
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
-        const check = gpa.deinit();
-        std.log.debug("gpa: {}", .{check});
+        const gpa_check = gpa.deinit();
+        std.log.info("gpa: {}", .{gpa_check});
     }
 
-    const alloc = gpa.allocator();
+    const allocator = gpa.allocator();
 
     const seed: u64 = @intCast(std.time.milliTimestamp());
     var prng = std.rand.DefaultPrng.init(seed);
@@ -23,7 +26,6 @@ pub fn main() !void {
     const db = DB{
         .file_name = "db.sqlite",
         .db_p = &db_p,
-        .alloc = &alloc,
         .random = &random,
     };
     try db.open();
@@ -33,19 +35,25 @@ pub fn main() !void {
 
     try db.initGroupsTable();
 
-    var daemon_p: ?*MHD.MHD_Daemon = null;
-    const mhd = MHD{
-        .port = 3000,
-        .daemon_p = &daemon_p,
-        .cls = &.{
-            .alloc = &alloc,
-            .db = &db,
-        },
+    const ctx = Ctx{
+        .db = &db,
     };
 
-    try mhd.start();
-    defer mhd.stop();
+    var server = try httpz.ServerCtx(*const Ctx, *const Ctx).init(allocator, .{
+        .port = 5882,
+    }, &ctx);
 
-    var buf: [10]u8 = undefined;
-    _ = try std.io.getStdIn().reader().readUntilDelimiterOrEof(buf[0..], '\n');
+    server.errorHandler(Handler.errorHandler);
+    server.notFound(Handler.notFound);
+
+    var router = server.router();
+
+    router.get("/", Handler.homePage);
+    router.post("/new-group", Handler.newGroup);
+
+    var group_router = router.group("/group", .{});
+    group_router.get("/:group_id", Handler.groupOverview);
+    group_router.post("/:group_id/new-expense", Handler.newExpense);
+
+    try server.listen();
 }

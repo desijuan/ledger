@@ -1,0 +1,18 @@
+.{
+    .name = "ledger",
+    .version = "0.0.1",
+
+    .dependencies = .{
+        .httpz = .{
+            .url = "https://github.com/karlseguin/http.zig/archive/79dad0f0cc652830cd8e49bf3e73aa77155ad4b2.tar.gz",
+            .hash = "1220ea0d5860657d59cf1ca0fe0e553bfabc7d9cd467005488155baffb1ddf65ecf2",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "sqlite3",
+        "src",
+    },
+}

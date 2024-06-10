@@ -8,7 +8,6 @@ const std = @import("std");
 
 file_name: [*c]const u8,
 db_p: *?*c.sqlite3,
-alloc: *const std.mem.Allocator,
 random: *const std.Random,
 
 const Self = @This();
@@ -84,15 +83,15 @@ pub fn initGroupsTable(self: *const Self) !void {
     std.log.info("Initialized groups table", .{});
 }
 
-pub fn isGroupIdValid(self: *const Self, group_id: u32) !bool {
+pub fn isGroupIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !bool {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT rowid FROM groups WHERE rowid == {d}",
         .{group_id},
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -126,15 +125,15 @@ pub fn isGroupIdValid(self: *const Self, group_id: u32) !bool {
     };
 }
 
-pub fn isMemberIdValid(self: *const Self, group_id: u32, member_id: i64) !bool {
+pub fn isMemberIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32, member_id: i64) !bool {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT rowid FROM members_{x} WHERE rowid == {d}",
         .{ group_id, member_id },
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -168,15 +167,15 @@ pub fn isMemberIdValid(self: *const Self, group_id: u32, member_id: i64) !bool {
     };
 }
 
-pub fn isTrIdValid(self: *const Self, group_id: u32, tr_id: i64) !bool {
+pub fn isTrIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32, tr_id: i64) !bool {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT rowid FROM tr_{x} WHERE rowid == {d}",
         .{ group_id, tr_id },
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -216,15 +215,15 @@ pub const GroupInfo = struct {
     description: []const u8,
 };
 
-pub fn getGroupInfo(self: *const Self, group_id: u32) !?*const GroupInfo {
+pub fn getGroupInfo(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !?*const GroupInfo {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT name, description FROM groups WHERE rowid == {d}",
         .{group_id},
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -248,22 +247,22 @@ pub fn getGroupInfo(self: *const Self, group_id: u32) !?*const GroupInfo {
     return switch (rc) {
         c.SQLITE_DONE => null,
         c.SQLITE_ROW => blk: {
-            const groupInfo = try self.alloc.create(GroupInfo);
-            errdefer self.alloc.destroy(groupInfo);
+            const groupInfo = try alloc.create(GroupInfo);
+            errdefer alloc.destroy(groupInfo);
 
             groupInfo.group_id = group_id;
 
             const name = try std.fmt.allocPrint(
-                self.alloc.*,
+                alloc,
                 "{s}",
                 .{c.sqlite3_column_text(stmt, 0)},
             );
-            errdefer self.alloc.free(name);
+            errdefer alloc.free(name);
 
             groupInfo.name = name;
 
             groupInfo.description = try std.fmt.allocPrint(
-                self.alloc.*,
+                alloc,
                 "{s}",
                 .{c.sqlite3_column_text(stmt, 1)},
             );
@@ -285,15 +284,15 @@ pub const Member = struct {
     name: []const u8,
 };
 
-pub fn getMemberInfo(self: *const Self, group_id: u32, member_id: i64) !?Member {
+pub fn getMemberInfo(self: *const Self, alloc: std.mem.Alloc, group_id: u32, member_id: i64) !?Member {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT name FROM members_{x} WHERE rowid == {d}",
         .{ group_id, member_id },
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -317,13 +316,13 @@ pub fn getMemberInfo(self: *const Self, group_id: u32, member_id: i64) !?Member 
     return switch (rc) {
         c.SQLITE_DONE => null,
         c.SQLITE_ROW => blk: {
-            const member = try self.alloc.create(Member);
-            errdefer self.alloc.destroy(member);
+            const member = try alloc.create(Member);
+            errdefer alloc.destroy(member);
 
             member.member_id = member_id;
 
             member.name = try std.fmt.allocPrint(
-                self.alloc.*,
+                alloc.*,
                 "{s}",
                 .{c.sqlite3_column_text(stmt, 0)},
             );
@@ -340,15 +339,15 @@ pub fn getMemberInfo(self: *const Self, group_id: u32, member_id: i64) !?Member 
     };
 }
 
-pub fn getMembers(self: *const Self, group_id: u32) ![]const Member {
+pub fn getMembers(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]const Member {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT rowid, name FROM members_{x}",
         .{group_id},
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -371,18 +370,18 @@ pub fn getMembers(self: *const Self, group_id: u32) ![]const Member {
 
     const data_count: usize = @intCast(c.sqlite3_data_count(stmt));
 
-    var array_list = try std.ArrayList(Member).initCapacity(self.alloc.*, data_count);
+    var array_list = try std.ArrayList(Member).initCapacity(alloc, data_count);
     errdefer array_list.deinit();
 
     while (rc == c.SQLITE_ROW) : (rc = c.sqlite3_step(stmt)) {
         const member_id: i64 = c.sqlite3_column_int64(stmt, 0);
 
         const name = try std.fmt.allocPrint(
-            self.alloc.*,
+            alloc,
             "{s}",
             .{c.sqlite3_column_text(stmt, 1)},
         );
-        errdefer self.alloc.free(name);
+        errdefer alloc.free(name);
 
         try array_list.append(Member{
             .member_id = member_id,
@@ -407,15 +406,15 @@ pub const Tr = struct {
     description: []const u8,
 };
 
-pub fn getTrs(self: *const Self, group_id: u32) ![]const Tr {
+pub fn getTrs(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]const Tr {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "SELECT rowid, t_from, t_to, t_amount, t_description FROM trs_{x}",
         .{group_id},
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -438,7 +437,7 @@ pub fn getTrs(self: *const Self, group_id: u32) ![]const Tr {
 
     const data_count: usize = @intCast(c.sqlite3_data_count(stmt));
 
-    var array_list = try std.ArrayList(Tr).initCapacity(self.alloc.*, data_count);
+    var array_list = try std.ArrayList(Tr).initCapacity(alloc, data_count);
     errdefer array_list.deinit();
 
     while (rc == c.SQLITE_ROW) : (rc = c.sqlite3_step(stmt)) {
@@ -448,11 +447,11 @@ pub fn getTrs(self: *const Self, group_id: u32) ![]const Tr {
         const t_amount: i64 = c.sqlite3_column_int64(stmt, 3);
 
         const t_description = try std.fmt.allocPrint(
-            self.alloc.*,
+            alloc,
             "{s}",
             .{c.sqlite3_column_text(stmt, 4)},
         );
-        errdefer self.alloc.free(t_description);
+        errdefer alloc.free(t_description);
 
         try array_list.append(Tr{
             .tr_id = @intCast(rowid),
@@ -474,42 +473,45 @@ pub fn getTrs(self: *const Self, group_id: u32) ![]const Tr {
 
 pub fn newGroup(
     self: *const Self,
+    alloc: std.mem.Allocator,
     name: []const u8,
     description: []const u8,
     members: []const []const u8,
 ) !u32 {
     var random_int = self.random.int(u32);
-    const group_id: u32 = while (try self.isGroupIdValid(random_int)) {
+    const group_id: u32 = while (try self.isGroupIdValid(alloc, random_int)) {
         random_int = self.random.int(u32);
     } else random_int;
 
-    try self.addGroup(group_id, name, description);
-    try self.createMembersTable(group_id);
+    try self.addGroup(alloc, group_id, name, description);
+    try self.createMembersTable(alloc, group_id);
     for (members) |member_name| {
-        _ = try self.addMember(group_id, member_name);
+        _ = try self.addMember(alloc, group_id, member_name);
     }
-    try self.createTrsTable(group_id);
+    try self.createTrsTable(alloc, group_id);
 
     return group_id;
 }
 
 pub fn newTr(
     self: *const Self,
+    alloc: std.mem.Allocator,
     group_id: u32,
     from_id: i64,
     to_id: i64,
     amount: i64,
     description: []const u8,
 ) !i64 {
-    if (!try self.isGroupIdValid(group_id)) return error.InvalidGroupId;
-    if (!try self.isMemberIdValid(group_id, from_id)) return error.InvalidMemberId;
-    if (!try self.isMemberIdValid(group_id, to_id)) return error.InvalidMemberId;
+    if (!try self.isGroupIdValid(alloc, group_id)) return error.InvalidGroupId;
+    if (!try self.isMemberIdValid(alloc, group_id, from_id)) return error.InvalidMemberId;
+    if (!try self.isMemberIdValid(alloc, group_id, to_id)) return error.InvalidMemberId;
 
-    return self.addTr(group_id, from_id, to_id, amount, description);
+    return self.addTr(alloc, group_id, from_id, to_id, amount, description);
 }
 
 fn addGroup(
     self: *const Self,
+    alloc: std.mem.Allocator,
     group_id: u32,
     name: []const u8,
     description: []const u8,
@@ -517,11 +519,11 @@ fn addGroup(
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "INSERT INTO groups (rowid, name, description) VALUES ({d}, :name, :description)",
         .{group_id},
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -576,7 +578,7 @@ fn addGroup(
     );
 }
 
-fn createMembersTable(self: *const Self, group_id: u32) !void {
+fn createMembersTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str_template =
@@ -585,8 +587,8 @@ fn createMembersTable(self: *const Self, group_id: u32) !void {
         \\);
     ;
 
-    const sql_str = try std.fmt.allocPrintZ(self.alloc.*, sql_str_template, .{group_id});
-    defer self.alloc.free(sql_str);
+    const sql_str = try std.fmt.allocPrintZ(alloc, sql_str_template, .{group_id});
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -616,15 +618,15 @@ fn createMembersTable(self: *const Self, group_id: u32) !void {
     std.log.info("Initialized members table for group {x}", .{group_id});
 }
 
-fn addMember(self: *const Self, group_id: u32, name: []const u8) !i64 {
+fn addMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32, name: []const u8) !i64 {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "INSERT INTO members_{x} (name) VALUES (:name)",
         .{group_id},
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -669,7 +671,7 @@ fn addMember(self: *const Self, group_id: u32, name: []const u8) !i64 {
     return member_id;
 }
 
-fn createTrsTable(self: *const Self, group_id: u32) !void {
+fn createTrsTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str_template =
@@ -681,8 +683,8 @@ fn createTrsTable(self: *const Self, group_id: u32) !void {
         \\);
     ;
 
-    const sql_str = try std.fmt.allocPrintZ(self.alloc.*, sql_str_template, .{group_id});
-    defer self.alloc.free(sql_str);
+    const sql_str = try std.fmt.allocPrintZ(alloc, sql_str_template, .{group_id});
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,
@@ -714,6 +716,7 @@ fn createTrsTable(self: *const Self, group_id: u32) !void {
 
 fn addTr(
     self: *const Self,
+    alloc: std.mem.Allocator,
     group_id: u32,
     from_id: i64,
     to_id: i64,
@@ -723,11 +726,11 @@ fn addTr(
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        self.alloc.*,
+        alloc,
         "INSERT INTO trs_{x} (t_from, t_to, t_amount, t_description) VALUES ({d}, {d}, {d}, :t_description)",
         .{ group_id, from_id, to_id, amount },
     );
-    defer self.alloc.free(sql_str);
+    defer alloc.free(sql_str);
 
     if (c.sqlite3_prepare_v2(
         self.db_p.*,

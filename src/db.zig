@@ -45,13 +45,21 @@ pub fn close(self: *const Self) !void {
     std.log.info("Successfully closed the database: {s}", .{self.file_name});
 }
 
+pub const GroupInfo = struct {
+    group_id: u32,
+    name: []const u8,
+    description: []const u8,
+    created_at: []const u8,
+};
+
 pub fn initGroupsTable(self: *const Self) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str =
         \\CREATE TABLE IF NOT EXISTS groups(
         \\name TEXT NOT NULL,
-        \\description TEXT
+        \\description TEXT,
+        \\created_at INTEGER NOT NULL
         \\)
     ;
 
@@ -172,7 +180,7 @@ pub fn isTrIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32, t
 
     const sql_str = try std.fmt.allocPrintZ(
         alloc,
-        "SELECT rowid FROM tr_{x} WHERE rowid == {d}",
+        "SELECT rowid FROM trs_{x} WHERE rowid == {d}",
         .{ group_id, tr_id },
     );
     defer alloc.free(sql_str);
@@ -209,18 +217,12 @@ pub fn isTrIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32, t
     };
 }
 
-pub const GroupInfo = struct {
-    group_id: u32,
-    name: []const u8,
-    description: []const u8,
-};
-
 pub fn getGroupInfo(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !?*const GroupInfo {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
         alloc,
-        "SELECT name, description FROM groups WHERE rowid == {d}",
+        "SELECT name, description, datetime(created_at, 'unixepoch') FROM groups WHERE rowid == {d}",
         .{group_id},
     );
     defer alloc.free(sql_str);
@@ -258,14 +260,23 @@ pub fn getGroupInfo(self: *const Self, alloc: std.mem.Allocator, group_id: u32) 
                 .{c.sqlite3_column_text(stmt, 0)},
             );
             errdefer alloc.free(name);
-
             groupInfo.name = name;
 
-            groupInfo.description = try std.fmt.allocPrint(
+            const description = try std.fmt.allocPrint(
                 alloc,
                 "{s}",
                 .{c.sqlite3_column_text(stmt, 1)},
             );
+            errdefer alloc.free(description);
+            groupInfo.description = description;
+
+            const created_at = try std.fmt.allocPrint(
+                alloc,
+                "{s}",
+                .{c.sqlite3_column_text(stmt, 2)},
+            );
+            errdefer alloc.free(created_at);
+            groupInfo.created_at = created_at;
 
             break :blk groupInfo;
         },
@@ -398,20 +409,12 @@ pub fn getMembers(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![
     return array_list.toOwnedSlice();
 }
 
-pub const Tr = struct {
-    tr_id: i64,
-    from_id: i64,
-    to_id: i64,
-    amount: i64,
-    description: []const u8,
-};
-
 pub fn getTrs(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]const Tr {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
         alloc,
-        "SELECT rowid, t_from, t_to, t_amount, t_description FROM trs_{x}",
+        "SELECT rowid, from_id, to_id, amount, description, datetime(timestamp, 'unixepoch') FROM trs_{x}",
         .{group_id},
     );
     defer alloc.free(sql_str);
@@ -442,23 +445,31 @@ pub fn getTrs(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]con
 
     while (rc == c.SQLITE_ROW) : (rc = c.sqlite3_step(stmt)) {
         const rowid: i64 = c.sqlite3_column_int64(stmt, 0);
-        const t_from: i64 = c.sqlite3_column_int64(stmt, 1);
-        const t_to: i64 = c.sqlite3_column_int64(stmt, 2);
-        const t_amount: i64 = c.sqlite3_column_int64(stmt, 3);
+        const from_id: i64 = c.sqlite3_column_int64(stmt, 1);
+        const to_id: i64 = c.sqlite3_column_int64(stmt, 2);
+        const amount: i64 = c.sqlite3_column_int64(stmt, 3);
 
-        const t_description = try std.fmt.allocPrint(
+        const description = try std.fmt.allocPrint(
             alloc,
             "{s}",
             .{c.sqlite3_column_text(stmt, 4)},
         );
-        errdefer alloc.free(t_description);
+        errdefer alloc.free(description);
+
+        const timestamp = try std.fmt.allocPrint(
+            alloc,
+            "{s}",
+            .{c.sqlite3_column_text(stmt, 5)},
+        );
+        errdefer alloc.free(timestamp);
 
         try array_list.append(Tr{
             .tr_id = @intCast(rowid),
-            .from_id = t_from,
-            .to_id = t_to,
-            .amount = t_amount,
-            .description = t_description,
+            .from_id = from_id,
+            .to_id = to_id,
+            .amount = amount,
+            .description = description,
+            .timestamp = timestamp,
         });
     } else if (rc != c.SQLITE_DONE) {
         std.log.err(
@@ -485,6 +496,7 @@ pub fn newGroup(
 
     try self.addGroup(alloc, group_id, name, description);
     try self.createMembersTable(alloc, group_id);
+    _ = try self.addGroupMember(alloc, group_id);
     for (members) |member_name| {
         _ = try self.addMember(alloc, group_id, member_name);
     }
@@ -520,7 +532,7 @@ fn addGroup(
 
     const sql_str = try std.fmt.allocPrintZ(
         alloc,
-        "INSERT INTO groups (rowid, name, description) VALUES ({d}, :name, :description)",
+        "INSERT INTO groups (rowid, name, description, created_at) VALUES ({d}, :name, :description, unixepoch())",
         .{group_id},
     );
     defer alloc.free(sql_str);
@@ -618,6 +630,50 @@ fn createMembersTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32
     std.log.info("Initialized members table for group {x}", .{group_id});
 }
 
+fn addGroupMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !i64 {
+    var stmt: ?*c.sqlite3_stmt = undefined;
+
+    const GROUP_MEMBER_NAME = "_group_";
+
+    const sql_str = try std.fmt.allocPrintZ(
+        alloc,
+        "INSERT INTO members_{x} (rowid, name) VALUES (0, '{s}')",
+        .{ group_id, GROUP_MEMBER_NAME },
+    );
+    defer alloc.free(sql_str);
+
+    if (c.sqlite3_prepare_v2(
+        self.db_p.*,
+        @as([*c]const u8, @ptrCast(sql_str)),
+        @as(c_int, @intCast(sql_str.len)),
+        &stmt,
+        null,
+    ) != c.SQLITE_OK) {
+        std.log.err(
+            "Error preparing sql statement\n{s}\n{s}",
+            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+        );
+        return error.DBError;
+    }
+    defer {
+        _ = c.sqlite3_finalize(stmt);
+    }
+
+    if (c.sqlite3_step(stmt) != c.SQLITE_DONE) {
+        std.log.err(
+            "Error stepping sql statement\n{s}\n{s}",
+            .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+        );
+        return error.DBError;
+    }
+
+    const member_id: i64 = @intCast(c.sqlite3_last_insert_rowid(self.db_p.*));
+
+    std.log.info("New Member [id: {d}, name: {s}]", .{ member_id, GROUP_MEMBER_NAME });
+
+    return member_id;
+}
+
 fn addMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32, name: []const u8) !i64 {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
@@ -671,15 +727,25 @@ fn addMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32, name: [
     return member_id;
 }
 
+pub const Tr = struct {
+    tr_id: i64,
+    from_id: i64,
+    to_id: i64,
+    amount: i64,
+    description: []const u8,
+    timestamp: []const u8,
+};
+
 fn createTrsTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str_template =
         \\CREATE TABLE trs_{x}(
-        \\t_from INTEGER NOT NULL,
-        \\t_to INTEGER NOT NULL,
-        \\t_amount INTEGER NOT NULL,
-        \\t_description TEXT
+        \\from_id INTEGER NOT NULL,
+        \\to_id INTEGER NOT NULL,
+        \\amount INTEGER NOT NULL,
+        \\description TEXT,
+        \\timestamp INTEGER NOT NULL
         \\);
     ;
 
@@ -727,7 +793,10 @@ fn addTr(
 
     const sql_str = try std.fmt.allocPrintZ(
         alloc,
-        "INSERT INTO trs_{x} (t_from, t_to, t_amount, t_description) VALUES ({d}, {d}, {d}, :t_description)",
+        \\INSERT INTO trs_{x}
+        \\(from_id, to_id, amount, description, timestamp)
+        \\VALUES ({d}, {d}, {d}, :description, unixepoch())
+    ,
         .{ group_id, from_id, to_id, amount },
     );
     defer alloc.free(sql_str);
@@ -756,7 +825,7 @@ fn addTr(
         @as(c_int, @intCast(description.len)),
         c.SQLITE_STATIC,
     ) != c.SQLITE_OK) {
-        std.log.err("Error binding parameter: {s} -> {s}", .{ description, ":t_description" });
+        std.log.err("Error binding parameter: {s} -> {s}", .{ description, ":description" });
         return error.DBError;
     }
 
@@ -771,8 +840,8 @@ fn addTr(
     const tr_id: i64 = @intCast(c.sqlite3_last_insert_rowid(self.db_p.*));
 
     std.log.info(
-        "New Transaction [group_id: {x} ({0d}), tr_id: {d}, from_id: {d}, to_id: {d}, description: {s}]",
-        .{ group_id, tr_id, from_id, to_id, description },
+        "New Transaction [group_id: {x} ({0d}), tr_id: {d}, from_id: {d}, to_id: {d}, amount: {d}, description: {s}]",
+        .{ group_id, tr_id, from_id, to_id, amount, description },
     );
 
     return tr_id;

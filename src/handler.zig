@@ -66,7 +66,8 @@ pub fn newGroup(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response) !voi
 const GroupBoard = struct {
     group_id: u32,
     name: []const u8,
-    description: ?[]const u8,
+    description: []const u8,
+    created_at: []const u8,
     members: []const DB.Member,
     trs: []const DB.Tr,
 };
@@ -107,6 +108,7 @@ pub fn groupOverview(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response)
             .group_id = group_id,
             .name = groupInfo.name,
             .description = groupInfo.description,
+            .created_at = groupInfo.created_at,
             .members = members,
             .trs = trs,
         },

@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "ledger",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -22,9 +22,9 @@ pub fn build(b: *std.Build) void {
     switch (optimize) {
         .Debug => exe.linkSystemLibrary("sqlite3"),
         else => {
-            exe.addIncludePath(.{ .path = "sqlite3" });
+            exe.addIncludePath(b.path("sqlite3"));
             exe.addCSourceFile(.{
-                .file = .{ .path = "sqlite3/sqlite3.c" },
+                .file = b.path("sqlite3/sqlite3.c"),
                 .flags = &.{},
             });
         },

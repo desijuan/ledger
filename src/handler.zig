@@ -8,7 +8,9 @@ pub const Ctx = struct {
 
 pub fn errorHandler(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
     return switch (err) {
+        error.SyntaxError,
         error.InvalidCharacter,
+        error.Overflow,
         error.InvalidGroupId,
         error.InvalidMemberId,
         error.InvalidTrId,

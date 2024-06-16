@@ -4,8 +4,8 @@
 
     .dependencies = .{
         .httpz = .{
-            .url = "https://github.com/karlseguin/http.zig/archive/79dad0f0cc652830cd8e49bf3e73aa77155ad4b2.tar.gz",
-            .hash = "1220ea0d5860657d59cf1ca0fe0e553bfabc7d9cd467005488155baffb1ddf65ecf2",
+            .url = "https://github.com/karlseguin/http.zig/archive/0b716e27d2e361c5b12983576cadbf922e012dd1.tar.gz",
+            .hash = "12205e49853daabaf47f9aa862f6ccd26b977ebb16eb39b76cd20946d6c4f195857b",
         },
     },
 

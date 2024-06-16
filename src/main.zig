@@ -5,16 +5,15 @@ const Handler = @import("handler.zig");
 
 const Ctx = Handler.Ctx;
 
+const PORT = 5882;
+
 pub const std_options = std.Options{
     .log_level = .info,
 };
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        const gpa_check = gpa.deinit();
-        std.log.info("gpa: {}", .{gpa_check});
-    }
+    defer std.log.info("gpa: {}", .{gpa.deinit()});
 
     const allocator = gpa.allocator();
 
@@ -39,8 +38,15 @@ pub fn main() !void {
         .db = &db,
     };
 
-    var server = try httpz.ServerCtx(*const Ctx, *const Ctx).init(allocator, .{
-        .port = 5882,
+    var server = try httpz.ServerCtx(*const Ctx, *const Ctx)
+        .init(allocator, .{
+        .port = PORT,
+        .cors = .{
+            .origin = "*",
+            .headers = "content-type",
+            .methods = "GET,POST",
+            .max_age = "300",
+        },
     }, &ctx);
 
     server.errorHandler(Handler.errorHandler);
@@ -55,5 +61,6 @@ pub fn main() !void {
     group_router.get("/:group_id", Handler.groupOverview);
     group_router.post("/:group_id/new-expense", Handler.newExpense);
 
+    std.log.info("Server listening on port {d}", .{PORT});
     try server.listen();
 }

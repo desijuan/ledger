@@ -30,7 +30,7 @@ pub fn open(self: *const Self) !void {
         return error.DBError;
     }
 
-    std.log.info("Successfully opened the database: {s}", .{self.file_name});
+    std.log.debug("Successfully opened the database: {s}", .{self.file_name});
 }
 
 pub fn close(self: *const Self) !void {
@@ -42,7 +42,7 @@ pub fn close(self: *const Self) !void {
         return error.DBError;
     }
 
-    std.log.info("Successfully closed the database: {s}", .{self.file_name});
+    std.log.debug("Successfully closed the database: {s}", .{self.file_name});
 }
 
 pub const GroupInfo = struct {
@@ -88,7 +88,7 @@ pub fn initGroupsTable(self: *const Self) !void {
         return error.DBError;
     }
 
-    std.log.info("Initialized groups table", .{});
+    std.log.debug("Initialized groups table", .{});
 }
 
 pub fn isGroupIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !bool {
@@ -584,7 +584,7 @@ fn addGroup(
         return error.DBError;
     }
 
-    std.log.info(
+    std.log.debug(
         "New Group [id: {x} ({0d}), name: {s}, description: {s}]",
         .{ group_id, name, description },
     );
@@ -627,7 +627,7 @@ fn createMembersTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32
         return error.DBError;
     }
 
-    std.log.info("Initialized members table for group {x}", .{group_id});
+    std.log.debug("Initialized members table for group {x}", .{group_id});
 }
 
 fn addGroupMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !i64 {
@@ -669,7 +669,7 @@ fn addGroupMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !i
 
     const member_id: i64 = @intCast(c.sqlite3_last_insert_rowid(self.db_p.*));
 
-    std.log.info("New Member [id: {d}, name: {s}]", .{ member_id, GROUP_MEMBER_NAME });
+    std.log.debug("New Member [id: {d}, name: {s}]", .{ member_id, GROUP_MEMBER_NAME });
 
     return member_id;
 }
@@ -722,7 +722,7 @@ fn addMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32, name: [
 
     const member_id: i64 = @intCast(c.sqlite3_last_insert_rowid(self.db_p.*));
 
-    std.log.info("New Member [id: {d}, name: {s}]", .{ member_id, name });
+    std.log.debug("New Member [id: {d}, name: {s}]", .{ member_id, name });
 
     return member_id;
 }
@@ -777,7 +777,7 @@ fn createTrsTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !v
         return error.DBError;
     }
 
-    std.log.info("Initialized transactions table for group {x}", .{group_id});
+    std.log.debug("Initialized transactions table for group {x}", .{group_id});
 }
 
 fn addTr(
@@ -839,7 +839,7 @@ fn addTr(
 
     const tr_id: i64 = @intCast(c.sqlite3_last_insert_rowid(self.db_p.*));
 
-    std.log.info(
+    std.log.debug(
         "New Transaction [group_id: {x} ({0d}), tr_id: {d}, from_id: {d}, to_id: {d}, amount: {d}, description: {s}]",
         .{ group_id, tr_id, from_id, to_id, amount, description },
     );

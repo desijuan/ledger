@@ -11,6 +11,8 @@ pub fn errorHandler(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response, 
         error.SyntaxError,
         error.InvalidCharacter,
         error.Overflow,
+        error.MissingField,
+        error.UnknownField,
         error.InvalidGroupId,
         error.InvalidMemberId,
         error.InvalidTrId,
@@ -20,7 +22,7 @@ pub fn errorHandler(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response, 
             res.status = 500;
             res.content_type = .TEXT;
             res.body = "Internal Server Error";
-            std.log.err("httpz: unhandled exception for request: {s}\nError: {}", .{ req.url.raw, err });
+            std.log.err("httpz: unhandled exception for request: {s}\nError: {s}", .{ req.url.raw, @errorName(err) });
         },
     };
 }

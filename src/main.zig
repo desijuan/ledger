@@ -38,8 +38,7 @@ pub fn main() !void {
         .db = &db,
     };
 
-    var server = try httpz.ServerCtx(*const Ctx, *const Ctx)
-        .init(allocator, .{
+    var server = try httpz.ServerCtx(*const Ctx, *const Ctx).init(allocator, .{
         .port = PORT,
         .cors = .{
             .origin = "*",
@@ -48,6 +47,7 @@ pub fn main() !void {
             .max_age = "300",
         },
     }, &ctx);
+    defer server.deinit();
 
     server.errorHandler(Handler.errorHandler);
     server.notFound(Handler.notFound);

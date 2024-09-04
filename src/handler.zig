@@ -56,9 +56,9 @@ pub fn newGroup(ctx: *const Ctx, req: *httpz.Request, res: *httpz.Response) !voi
     );
     defer parsedNewGroupReqInfo.deinit();
 
-    const grp = parsedNewGroupReqInfo.value;
+    const group = parsedNewGroupReqInfo.value;
 
-    const group_id = try ctx.db.newGroup(res.arena, grp.name, grp.description, grp.members);
+    const group_id = try ctx.db.newGroup(res.arena, group.name, group.description, group.members);
 
     res.status = 200;
     try res.json(.{

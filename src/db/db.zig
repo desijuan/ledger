@@ -3,43 +3,13 @@ const c = @cImport(@cInclude("sqlite3.h"));
 pub const sqlite3 = c.sqlite3;
 
 const std = @import("std");
+const schema = @import("schema.zig");
 
 file_name: [*c]const u8,
 db_p: *?*c.sqlite3,
-random: *const std.Random,
+random: std.Random,
 
 const Self = @This();
-
-const groups_schema =
-    \\CREATE TABLE IF NOT EXISTS groups (
-    \\id INTEGER PRIMARY KEY,
-    \\name TEXT NOT NULL,
-    \\description TEXT,
-    \\created_at INTEGER NOT NULL
-    \\)
-;
-
-fn members_schema(alloc: std.mem.Allocator, group_id: u32) ![:0]const u8 {
-    return try std.fmt.allocPrintZ(alloc,
-        \\CREATE TABLE members_{x} (
-        \\id INTEGER PRIMARY KEY,
-        \\name TEXT NOT NULL
-        \\)
-    , .{group_id});
-}
-
-fn trs_schema(alloc: std.mem.Allocator, group_id: u32) ![:0]const u8 {
-    return try std.fmt.allocPrintZ(alloc,
-        \\CREATE TABLE trs_{x} (
-        \\id INTEGER PRIMARY KEY,
-        \\from_id INTEGER NOT NULL,
-        \\to_id INTEGER NOT NULL,
-        \\amount INTEGER NOT NULL,
-        \\description TEXT,
-        \\timestamp INTEGER NOT NULL
-        \\)
-    , .{group_id});
-}
 
 pub const GroupInfo = struct {
     group_id: u32,
@@ -104,6 +74,10 @@ fn bindText(
     }
 }
 
+inline fn columnSlice(stmt: ?*c.sqlite3_stmt, iCol: comptime_int) []const u8 {
+    return c.sqlite3_column_text(stmt, iCol)[0..@as(usize, @intCast(c.sqlite3_column_bytes(stmt, iCol)))];
+}
+
 pub fn open(self: *const Self) !void {
     const sqlite3_version = c.sqlite3_libversion();
     std.log.info("SQLite v{s}", .{sqlite3_version});
@@ -140,30 +114,31 @@ pub fn close(self: *const Self) !void {
 pub fn initGroupsTable(self: *const Self) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
-    try self.prepareStmt(&stmt, groups_schema);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    try self.prepareStmt(&stmt, schema.groups);
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.stepStmtOnce(stmt);
 
     std.log.debug("Initialized groups table", .{});
 }
 
-inline fn isIdValid(self: *const Self, alloc: std.mem.Allocator, table: []const u8, id: i64) !bool {
+inline fn isIdValid(
+    self: *const Self,
+    allocator: std.mem.Allocator,
+    table: []const u8,
+    id: i64,
+) !bool {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "SELECT id FROM {s} WHERE id = {d}",
         .{ table, id },
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     const rc = c.sqlite3_step(stmt);
 
@@ -180,85 +155,71 @@ inline fn isIdValid(self: *const Self, alloc: std.mem.Allocator, table: []const 
     };
 }
 
-pub fn isGroupIdValid(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !bool {
-    return isIdValid(self, alloc, "groups", group_id);
+pub fn isGroupIdValid(self: *const Self, allocator: std.mem.Allocator, group_id: u32) !bool {
+    return isIdValid(self, allocator, "groups", group_id);
 }
 
 pub fn isMemberIdValid(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     group_id: u32,
     member_id: i64,
 ) !bool {
-    const members_table = try std.fmt.allocPrint(alloc, "members_{x}", .{group_id});
-    defer alloc.free(members_table);
+    const members_table = try std.fmt.allocPrint(allocator, "members_{x}", .{group_id});
+    defer allocator.free(members_table);
 
-    return isIdValid(self, alloc, members_table, member_id);
+    return isIdValid(self, allocator, members_table, member_id);
 }
 
 pub fn isTrIdValid(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     group_id: u32,
     tr_id: i64,
 ) !bool {
-    const trs_table = try std.fmt.allocPrint(alloc, "trs_{x}", .{group_id});
-    defer alloc.free(trs_table);
+    const trs_table = try std.fmt.allocPrint(allocator, "trs_{x}", .{group_id});
+    defer allocator.free(trs_table);
 
-    return isIdValid(self, alloc, trs_table, tr_id);
+    return isIdValid(self, allocator, trs_table, tr_id);
 }
 
 pub fn getGroupInfo(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     group_id: u32,
 ) !?*const GroupInfo {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "SELECT name, description, datetime(created_at, 'unixepoch') FROM groups WHERE id = {d}",
         .{group_id},
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     const rc = c.sqlite3_step(stmt);
 
     return switch (rc) {
         c.SQLITE_DONE => null,
         c.SQLITE_ROW => blk: {
-            const groupInfo = try alloc.create(GroupInfo);
-            errdefer alloc.destroy(groupInfo);
+            const groupInfo = try allocator.create(GroupInfo);
+            errdefer allocator.destroy(groupInfo);
+
+            const name: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 0));
+            errdefer allocator.free(name);
+
+            const description: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 1));
+            errdefer allocator.free(description);
+
+            const created_at: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 2));
+            errdefer allocator.free(created_at);
 
             groupInfo.group_id = group_id;
-
-            const name = try std.fmt.allocPrint(
-                alloc,
-                "{s}",
-                .{c.sqlite3_column_text(stmt, 0)},
-            );
-            errdefer alloc.free(name);
             groupInfo.name = name;
-
-            const description = try std.fmt.allocPrint(
-                alloc,
-                "{s}",
-                .{c.sqlite3_column_text(stmt, 1)},
-            );
-            errdefer alloc.free(description);
             groupInfo.description = description;
-
-            const created_at = try std.fmt.allocPrint(
-                alloc,
-                "{s}",
-                .{c.sqlite3_column_text(stmt, 2)},
-            );
-            errdefer alloc.free(created_at);
             groupInfo.created_at = created_at;
 
             break :blk groupInfo;
@@ -275,40 +236,34 @@ pub fn getGroupInfo(
 
 pub fn getMemberInfo(
     self: *const Self,
-    alloc: std.mem.Alloc,
+    allocator: std.mem.Allocator,
     group_id: u32,
     member_id: i64,
-) !?Member {
+) !?*const Member {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "SELECT name FROM members_{x} WHERE id = {d}",
         .{ group_id, member_id },
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     const rc = c.sqlite3_step(stmt);
 
     return switch (rc) {
         c.SQLITE_DONE => null,
         c.SQLITE_ROW => blk: {
-            const member = try alloc.create(Member);
-            errdefer alloc.destroy(member);
+            const member = try allocator.create(Member);
+            errdefer allocator.destroy(member);
+
+            const name: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 0));
+            errdefer allocator.free(name);
 
             member.member_id = member_id;
-
-            const name = try std.fmt.allocPrint(
-                alloc.*,
-                "{s}",
-                .{c.sqlite3_column_text(stmt, 0)},
-            );
-            errdefer alloc.free(name);
             member.name = name;
 
             break :blk member;
@@ -323,37 +278,83 @@ pub fn getMemberInfo(
     };
 }
 
-pub fn getMembers(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]const Member {
+pub fn getTrInfo(
+    self: *const Self,
+    allocator: std.mem.Allocator,
+    group_id: u32,
+    tr_id: i64,
+) !?*const Tr {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
+        "SELECT from_id, to_id, amount, description, datetime(timestamp, 'unixepoch') FROM trs_{x} WHERE id = {d}",
+        .{ group_id, tr_id },
+    );
+    defer allocator.free(sql_str);
+
+    try self.prepareStmt(&stmt, sql_str);
+    defer _ = c.sqlite3_finalize(stmt);
+
+    const rc = c.sqlite3_step(stmt);
+
+    return switch (rc) {
+        c.SQLITE_DONE => null,
+        c.SQLITE_ROW => blk: {
+            const tr = try allocator.create(Tr);
+            errdefer allocator.destroy(tr);
+
+            const from_id: i64 = c.sqlite3_column_int64(stmt, 0);
+            const to_id: i64 = c.sqlite3_column_int64(stmt, 1);
+            const amount: i64 = c.sqlite3_column_int64(stmt, 2);
+
+            const description: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 3));
+            errdefer allocator.free(description);
+
+            const timestamp: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 4));
+            errdefer allocator.free(timestamp);
+
+            tr.tr_id = tr_id;
+            tr.from_id = from_id;
+            tr.to_id = to_id;
+            tr.amount = amount;
+            tr.description = description;
+            tr.timestamp = timestamp;
+
+            break :blk tr;
+        },
+        else => blk: {
+            std.log.err(
+                "Error stepping sql statement\n{s}\n{s}",
+                .{ sql_str, c.sqlite3_errmsg(self.db_p.*) },
+            );
+            break :blk error.DBError;
+        },
+    };
+}
+
+pub fn getMembers(self: *const Self, allocator: std.mem.Allocator, group_id: u32) ![]const Member {
+    var stmt: ?*c.sqlite3_stmt = undefined;
+
+    const sql_str = try std.fmt.allocPrintZ(
+        allocator,
         "SELECT id, name FROM members_{x}",
         .{group_id},
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
-    var rc = c.sqlite3_step(stmt);
-
-    const data_count: usize = @intCast(c.sqlite3_data_count(stmt));
-
-    var array_list = try std.ArrayList(Member).initCapacity(alloc, data_count);
+    var array_list = try std.ArrayList(Member).initCapacity(allocator, 16);
     errdefer array_list.deinit();
 
+    var rc = c.sqlite3_step(stmt);
     while (rc == c.SQLITE_ROW) : (rc = c.sqlite3_step(stmt)) {
         const member_id: i64 = c.sqlite3_column_int64(stmt, 0);
 
-        const name = try std.fmt.allocPrint(
-            alloc,
-            "{s}",
-            .{c.sqlite3_column_text(stmt, 1)},
-        );
-        errdefer alloc.free(name);
+        const name: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 1));
+        errdefer allocator.free(name);
 
         try array_list.append(Member{
             .member_id = member_id,
@@ -370,47 +371,34 @@ pub fn getMembers(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![
     return array_list.toOwnedSlice();
 }
 
-pub fn getTrs(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]const Tr {
+pub fn getTrs(self: *const Self, allocator: std.mem.Allocator, group_id: u32) ![]const Tr {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "SELECT id, from_id, to_id, amount, description, datetime(timestamp, 'unixepoch') FROM trs_{x}",
         .{group_id},
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
-    var rc = c.sqlite3_step(stmt);
-
-    const data_count: usize = @intCast(c.sqlite3_data_count(stmt));
-
-    var array_list = try std.ArrayList(Tr).initCapacity(alloc, data_count);
+    var array_list = try std.ArrayList(Tr).initCapacity(allocator, 64);
     errdefer array_list.deinit();
 
+    var rc = c.sqlite3_step(stmt);
     while (rc == c.SQLITE_ROW) : (rc = c.sqlite3_step(stmt)) {
         const tr_id: i64 = c.sqlite3_column_int64(stmt, 0);
         const from_id: i64 = c.sqlite3_column_int64(stmt, 1);
         const to_id: i64 = c.sqlite3_column_int64(stmt, 2);
         const amount: i64 = c.sqlite3_column_int64(stmt, 3);
 
-        const description = try std.fmt.allocPrint(
-            alloc,
-            "{s}",
-            .{c.sqlite3_column_text(stmt, 4)},
-        );
-        errdefer alloc.free(description);
+        const description: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 4));
+        errdefer allocator.free(description);
 
-        const timestamp = try std.fmt.allocPrint(
-            alloc,
-            "{s}",
-            .{c.sqlite3_column_text(stmt, 5)},
-        );
-        errdefer alloc.free(timestamp);
+        const timestamp: []const u8 = try allocator.dupe(u8, columnSlice(stmt, 5));
+        errdefer allocator.free(timestamp);
 
         try array_list.append(Tr{
             .tr_id = tr_id,
@@ -433,46 +421,48 @@ pub fn getTrs(self: *const Self, alloc: std.mem.Allocator, group_id: u32) ![]con
 
 pub fn newGroup(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     name: []const u8,
     description: []const u8,
     members: []const []const u8,
 ) !u32 {
     var random_int = self.random.int(u32);
-    const group_id: u32 = while (try self.isGroupIdValid(alloc, random_int)) {
+    const group_id: u32 = while (try self.isGroupIdValid(allocator, random_int)) {
         random_int = self.random.int(u32);
     } else random_int;
 
-    try self.addGroup(alloc, group_id, name, description);
-    try self.createMembersTable(alloc, group_id);
-    _ = try self.addGroupMember(alloc, group_id);
+    try self.addGroup(allocator, group_id, name, description);
+    try self.createMembersTable(allocator, group_id);
+    _ = try self.addGroupMember(allocator, group_id);
     for (members) |member_name| {
-        _ = try self.addMember(alloc, group_id, member_name);
+        _ = try self.addMember(allocator, group_id, member_name);
     }
-    try self.createTrsTable(alloc, group_id);
+    try self.createTrsTable(allocator, group_id);
 
     return group_id;
 }
 
 pub fn newTr(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     group_id: u32,
     from_id: i64,
     to_id: i64,
     amount: i64,
     description: []const u8,
-) !i64 {
-    if (!try self.isGroupIdValid(alloc, group_id)) return error.InvalidGroupId;
-    if (!try self.isMemberIdValid(alloc, group_id, from_id)) return error.InvalidMemberId;
-    if (!try self.isMemberIdValid(alloc, group_id, to_id)) return error.InvalidMemberId;
+) !*const Tr {
+    if (!try self.isGroupIdValid(allocator, group_id)) return error.InvalidGroupId;
+    if (!try self.isMemberIdValid(allocator, group_id, from_id)) return error.InvalidMemberId;
+    if (!try self.isMemberIdValid(allocator, group_id, to_id)) return error.InvalidMemberId;
 
-    return self.addTr(alloc, group_id, from_id, to_id, amount, description);
+    const tr_id = try self.addTr(allocator, group_id, from_id, to_id, amount, description);
+
+    return try self.getTrInfo(allocator, group_id, tr_id) orelse error.DBError;
 }
 
 fn addGroup(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     group_id: u32,
     name: []const u8,
     description: []const u8,
@@ -480,16 +470,14 @@ fn addGroup(
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "INSERT INTO groups (id, name, description, created_at) VALUES ({d}, :name, :description, unixepoch())",
         .{group_id},
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.bindText(stmt, 1, name, ":name");
     try self.bindText(stmt, 2, description, ":description");
@@ -502,38 +490,34 @@ fn addGroup(
     );
 }
 
-fn createMembersTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !void {
+fn createMembersTable(self: *const Self, allocator: std.mem.Allocator, group_id: u32) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
-    const sql_str = try members_schema(alloc, group_id);
-    defer alloc.free(sql_str);
+    const sql_str = try schema.members(allocator, group_id);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.stepStmtOnce(stmt);
 
     std.log.debug("Initialized members table for group {x}", .{group_id});
 }
 
-fn addGroupMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !i64 {
+fn addGroupMember(self: *const Self, allocator: std.mem.Allocator, group_id: u32) !i64 {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const GROUP_MEMBER_NAME = "_group_";
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "INSERT INTO members_{x} (id, name) VALUES (0, '{s}')",
         .{ group_id, GROUP_MEMBER_NAME },
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.stepStmtOnce(stmt);
 
@@ -544,20 +528,18 @@ fn addGroupMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !i
     return member_id;
 }
 
-fn addMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32, name: []const u8) !i64 {
+fn addMember(self: *const Self, allocator: std.mem.Allocator, group_id: u32, name: []const u8) !i64 {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         "INSERT INTO members_{x} (name) VALUES (:name)",
         .{group_id},
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.bindText(stmt, 1, name, ":name");
 
@@ -570,16 +552,14 @@ fn addMember(self: *const Self, alloc: std.mem.Allocator, group_id: u32, name: [
     return member_id;
 }
 
-fn createTrsTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !void {
+fn createTrsTable(self: *const Self, allocator: std.mem.Allocator, group_id: u32) !void {
     var stmt: ?*c.sqlite3_stmt = undefined;
 
-    const sql_str = try trs_schema(alloc, group_id);
-    defer alloc.free(sql_str);
+    const sql_str = try schema.trs(allocator, group_id);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.stepStmtOnce(stmt);
 
@@ -588,7 +568,7 @@ fn createTrsTable(self: *const Self, alloc: std.mem.Allocator, group_id: u32) !v
 
 fn addTr(
     self: *const Self,
-    alloc: std.mem.Allocator,
+    allocator: std.mem.Allocator,
     group_id: u32,
     from_id: i64,
     to_id: i64,
@@ -598,19 +578,17 @@ fn addTr(
     var stmt: ?*c.sqlite3_stmt = undefined;
 
     const sql_str = try std.fmt.allocPrintZ(
-        alloc,
+        allocator,
         \\INSERT INTO trs_{x}
         \\(from_id, to_id, amount, description, timestamp)
         \\VALUES ({d}, {d}, {d}, :description, unixepoch())
     ,
         .{ group_id, from_id, to_id, amount },
     );
-    defer alloc.free(sql_str);
+    defer allocator.free(sql_str);
 
     try self.prepareStmt(&stmt, sql_str);
-    defer {
-        _ = c.sqlite3_finalize(stmt);
-    }
+    defer _ = c.sqlite3_finalize(stmt);
 
     try self.bindText(stmt, 1, description, ":description");
 

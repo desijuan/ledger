@@ -1,9 +1,7 @@
 const std = @import("std");
 const httpz = @import("httpz");
-const DB = @import("db.zig");
-const Handler = @import("handler.zig");
-
-const Ctx = Handler.Ctx;
+const DB = @import("db/db.zig");
+const Handler = @import("server/Handler.zig");
 
 const PORT = 5882;
 
@@ -12,20 +10,19 @@ pub const std_options = std.Options{
 };
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
     defer std.log.info("gpa: {}", .{gpa.deinit()});
 
     const allocator = gpa.allocator();
 
     const seed: u64 = @intCast(std.time.milliTimestamp());
-    var prng = std.rand.DefaultPrng.init(seed);
-    const random = prng.random();
+    var prng = std.Random.DefaultPrng.init(seed);
 
     var db_p: ?*DB.sqlite3 = null;
     const db = DB{
         .file_name = "db.sqlite",
         .db_p = &db_p,
-        .random = &random,
+        .random = prng.random(),
     };
     try db.open();
     defer db.close() catch |err| {
@@ -34,32 +31,22 @@ pub fn main() !void {
 
     try db.initGroupsTable();
 
-    const ctx = Ctx{
-        .db = &db,
-    };
+    const handler = Handler{ .db = &db };
 
-    var server = try httpz.ServerCtx(*const Ctx, *const Ctx).init(allocator, .{
-        .port = PORT,
-        .cors = .{
-            .origin = "*",
-            .headers = "content-type",
-            .methods = "GET,POST",
-            .max_age = "300",
-        },
-    }, &ctx);
+    var server = try httpz.Server(*const Handler).init(allocator, .{ .port = PORT }, &handler);
     defer server.deinit();
 
-    server.errorHandler(Handler.errorHandler);
-    server.notFound(Handler.notFound);
+    // server.errorHandler(handlers.errorHandler);
+    // server.notFound(handlers.notFound);
 
-    var router = server.router();
+    var router = try server.router(.{});
 
-    router.get("/", Handler.homePage);
-    router.post("/new-group", Handler.newGroup);
+    router.get("/", Handler.homePage, .{});
+    router.post("/new-group", Handler.newGroup, .{});
 
     var group_router = router.group("/group", .{});
-    group_router.get("/:group_id", Handler.groupOverview);
-    group_router.post("/:group_id/new-expense", Handler.newExpense);
+    group_router.get("/:group_id", Handler.groupOverview, .{});
+    group_router.post("/:group_id/new-expense", Handler.newExpense, .{});
 
     std.log.info("Server listening on port {d}", .{PORT});
     try server.listen();

@@ -1,18 +1,19 @@
 .{
-    .name = "ledger",
+    .name = .ledger,
     .version = "0.0.1",
+    .fingerprint = 0xc07ba4bc1352cb7f,
+    .minimum_zig_version = "0.14.0",
 
     .dependencies = .{
         .httpz = .{
-            .url = "https://github.com/karlseguin/http.zig/archive/0b716e27d2e361c5b12983576cadbf922e012dd1.tar.gz",
-            .hash = "12205e49853daabaf47f9aa862f6ccd26b977ebb16eb39b76cd20946d6c4f195857b",
+            .url = "git+https://github.com/karlseguin/http.zig?ref=master#0ce9038e13c138423f68d95a475159039458e798",
+            .hash = "httpz-0.0.0-PNVzrJ-0BgAp8WPkVfsFGNPRlRpBoU-8w0LxMDXBp37t",
         },
     },
 
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "sqlite3",
         "src",
     },
 }

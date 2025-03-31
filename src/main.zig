@@ -6,7 +6,7 @@ const Handler = @import("server/Handler.zig");
 const PORT = 5882;
 
 pub const std_options = std.Options{
-    .log_level = .info,
+    .log_level = .debug,
 };
 
 pub fn main() !void {

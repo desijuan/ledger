@@ -36,10 +36,14 @@ pub fn main() !void {
     var server = try httpz.Server(*const Handler).init(allocator, .{ .port = PORT }, &handler);
     defer server.deinit();
 
-    // server.errorHandler(handlers.errorHandler);
-    // server.notFound(handlers.notFound);
+    const cors = try server.middleware(httpz.middleware.Cors, .{
+        .origin = "*",
+        .headers = "content-type",
+        .methods = "GET,POST",
+        .max_age = "300",
+    });
 
-    var router = try server.router(.{});
+    var router = try server.router(.{ .middlewares = &.{cors} });
 
     router.get("/", Handler.homePage, .{});
     router.post("/new-group", Handler.newGroup, .{});

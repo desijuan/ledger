@@ -1,16 +1,22 @@
 const std = @import("std");
 const httpz = @import("httpz");
 
-const utils = @import("../utils.zig");
-
 const DB = @import("../db/db.zig");
 const GroupInfo = DB.GroupInfo;
 const Member = DB.Member;
 const Tr = DB.Tr;
 
 db: *const DB,
+index: []const u8,
+stylesheet: []const u8,
+js_src: []const u8,
 
 const Self = @This();
+
+pub fn dispatch(self: *const Self, action: httpz.Action(*const Self), req: *httpz.Request, res: *httpz.Response) !void {
+    std.log.info("{d} {s} {s}", .{ res.status, @tagName(req.method), req.url.path });
+    try action(self, req, res);
+}
 
 pub fn uncaughtError(self: *const Self, req: *httpz.Request, res: *httpz.Response, err: anyerror) void {
     return switch (err) {
@@ -39,22 +45,22 @@ pub fn notFound(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
     res.body = "Not Found";
 }
 
-pub fn homePage(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
+pub fn homePage(self: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
     res.status = 200;
     res.content_type = .HTML;
-    res.body = try utils.readFile(res.arena, "frontend/public/index.html");
+    res.body = self.index;
 }
 
-pub fn cssStyles(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
+pub fn cssStyles(self: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
     res.status = 200;
-    res.content_type = .HTML;
-    res.body = try utils.readFile(res.arena, "frontend/public/styles.css");
+    res.content_type = .CSS;
+    res.body = self.stylesheet;
 }
 
-pub fn appJs(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
+pub fn appJs(self: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
     res.status = 200;
-    res.content_type = .HTML;
-    res.body = try utils.readFile(res.arena, "frontend/public/app.js");
+    res.content_type = .JS;
+    res.body = self.js_src;
 }
 
 const NewGroupReqInfo = struct {

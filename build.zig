@@ -14,6 +14,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "ledger",
         .root_module = exe_mod,
+        .use_llvm = (optimize != .Debug),
     });
 
     const httpz = b.dependency("httpz", .{ .target = target, .optimize = optimize });

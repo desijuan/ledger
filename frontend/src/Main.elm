@@ -25,34 +25,9 @@ encodeMsgPage msg page =
             ]
 
 
-backend : String
-backend =
-    "localhost:5882"
-
-
 appName : String
 appName =
     "Ledger"
-
-
-groupName : String
-groupName =
-    "Las Chichis"
-
-
-groupDescription : String
-groupDescription =
-    "El mejor de todos"
-
-
-members : Array Member
-members =
-    Array.fromList
-        [ { id = 0, name = "_group_" }
-        , { id = 1, name = "Nahue" }
-        , { id = 2, name = "Fran" }
-        , { id = 3, name = "Juan" }
-        ]
 
 
 main : Program () Model Msg
@@ -151,6 +126,11 @@ msgToString msg =
 
 parser : Parser (( Page, Cmd Msg ) -> a) a
 parser =
+    Parser.s "app" </> innerParser
+
+
+innerParser : Parser (( Page, Cmd Msg ) -> a) a
+innerParser =
     Parser.oneOf
         [ Parser.map ( Home, Cmd.none ) Parser.top
         , Parser.map ( NewGroup <| NewGroup.Model FillingForm "" "" [] "", Cmd.none ) (s "new-group")
@@ -234,7 +214,7 @@ updateHome msg model =
         HomeMsg homeMsg ->
             case homeMsg of
                 Home.ClickedNewGroup ->
-                    ( model, Nav.pushUrl model.key "new-group" )
+                    ( model, Nav.pushUrl model.key "/app/new-group" )
 
         _ ->
             showErrorPage msg model
@@ -246,7 +226,12 @@ updateGroupOverview msg model groupOverviewModel =
         GroupOverviewMsg groupOverviewMsg ->
             case groupOverviewMsg of
                 GroupOverview.ClickedNewExpense ->
-                    ( model, Nav.pushUrl model.key "new-expense" )
+                    case groupOverviewModel of
+                        GroupOverview.Loaded groupInfo ->
+                            ( model, Nav.pushUrl model.key <| "/app/" ++ groupInfo.group.id ++ "/new-expense" )
+
+                        _ ->
+                            showErrorPage msg model
 
                 _ ->
                     let
@@ -268,7 +253,7 @@ updateNewGroup msg model newGroupModel =
                     ( { model | page = Error }, logToConsole <| "Error: " ++ httpErrorToString error )
 
                 NewGroup.GotServerResponse (Ok response) ->
-                    ( model, Nav.pushUrl model.key <| response.groupId ++ "/group-overview" )
+                    ( model, Nav.pushUrl model.key <| "/app/" ++ response.groupId ++ "/group-overview" )
 
                 _ ->
                     let

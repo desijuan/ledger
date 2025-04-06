@@ -7,4 +7,7 @@ run:
 clean:
 	rm -rf .zig-cache zig-out
 
-.PHONY: default build run clean
+frontend:
+	$(MAKE) -C frontend install
+
+.PHONY: build run clean frontend

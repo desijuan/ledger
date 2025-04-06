@@ -1,6 +1,8 @@
 const std = @import("std");
 const httpz = @import("httpz");
 
+const utils = @import("../utils.zig");
+
 const DB = @import("../db/db.zig");
 const GroupInfo = DB.GroupInfo;
 const Member = DB.Member;
@@ -39,8 +41,20 @@ pub fn notFound(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
 
 pub fn homePage(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
     res.status = 200;
-    res.content_type = .TEXT;
-    res.body = "Hello my friend!";
+    res.content_type = .HTML;
+    res.body = try utils.readFile(res.arena, "frontend/public/index.html");
+}
+
+pub fn cssStyles(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
+    res.status = 200;
+    res.content_type = .HTML;
+    res.body = try utils.readFile(res.arena, "frontend/public/styles.css");
+}
+
+pub fn appJs(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
+    res.status = 200;
+    res.content_type = .HTML;
+    res.body = try utils.readFile(res.arena, "frontend/public/app.js");
 }
 
 const NewGroupReqInfo = struct {

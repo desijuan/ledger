@@ -2,3 +2,9 @@
 zig-out
 
 db.sqlite
+
+elm-stuff
+repl-temp-*
+
+app.js
+public/app.js

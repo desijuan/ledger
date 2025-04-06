@@ -46,6 +46,9 @@ pub fn main() !void {
     var router = try server.router(.{ .middlewares = &.{cors} });
 
     router.get("/", Handler.homePage, .{});
+    router.get("/styles.css", Handler.cssStyles, .{});
+    router.get("/app.js", Handler.appJs, .{});
+
     router.post("/new-group", Handler.newGroup, .{});
 
     var group_router = router.group("/group", .{});

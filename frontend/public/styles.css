@@ -1,0 +1,14 @@
+:root,
+#root {
+    background-color: var(--bs-gray-200);
+}
+
+.card {
+    max-width: 400px;
+}
+
+.btn-pequeno {
+    --bs-btn-padding-y: 0.12rem;
+    --bs-btn-padding-x: 0.25rem;
+    --bs-btn-font-size: 0.7rem;
+}

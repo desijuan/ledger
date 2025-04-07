@@ -75,11 +75,11 @@ pub fn main() !void {
     var router = try server.router(.{ .middlewares = &.{cors} });
 
     var public_router = router.group("/public", .{});
-    public_router.get("/styles.css", Handler.cssStyles, .{});
-    public_router.get("/app.js", Handler.appJs, .{});
+    public_router.get("/styles.css", Handler.static(.CSS, "stylesheet"), .{});
+    public_router.get("/app.js", Handler.static(.JS, "js_src"), .{});
 
     var app_router = router.group("/app", .{});
-    app_router.get("/*", Handler.homePage, .{});
+    app_router.get("/*", Handler.static(.HTML, "index"), .{});
 
     router.post("/new-group", Handler.newGroup, .{});
 

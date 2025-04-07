@@ -28,7 +28,7 @@ pub fn uncaughtError(self: *const Self, req: *httpz.Request, res: *httpz.Respons
         error.InvalidGroupId,
         error.InvalidMemberId,
         error.InvalidTrId,
-        => notFound(self, req, res) catch {},
+        => notFound(self, req, res),
 
         else => {
             res.status = 500;
@@ -39,28 +39,23 @@ pub fn uncaughtError(self: *const Self, req: *httpz.Request, res: *httpz.Respons
     };
 }
 
-pub fn notFound(_: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
+pub fn notFound(_: *const Self, _: *httpz.Request, res: *httpz.Response) void {
     res.status = 404;
     res.content_type = .TEXT;
     res.body = "Not Found";
 }
 
-pub fn homePage(self: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
-    res.status = 200;
-    res.content_type = .HTML;
-    res.body = self.index;
-}
-
-pub fn cssStyles(self: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
-    res.status = 200;
-    res.content_type = .CSS;
-    res.body = self.stylesheet;
-}
-
-pub fn appJs(self: *const Self, _: *httpz.Request, res: *httpz.Response) !void {
-    res.status = 200;
-    res.content_type = .JS;
-    res.body = self.js_src;
+pub fn static(
+    comptime content_type: httpz.ContentType,
+    comptime field_name: []const u8,
+) fn (*const Self, *httpz.Request, *httpz.Response) error{}!void {
+    return struct {
+        fn handler(self: *const Self, _: *httpz.Request, res: *httpz.Response) error{}!void {
+            res.status = 200;
+            res.content_type = content_type;
+            res.body = @field(self, field_name);
+        }
+    }.handler;
 }
 
 const NewGroupReqInfo = struct {

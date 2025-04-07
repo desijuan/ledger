@@ -14,7 +14,7 @@ js_src: []const u8,
 const Self = @This();
 
 pub fn dispatch(self: *const Self, action: httpz.Action(*const Self), req: *httpz.Request, res: *httpz.Response) !void {
-    std.log.info("{d} {s} {s}", .{ res.status, @tagName(req.method), req.url.path });
+    std.log.info("{d} {s} {} {s}", .{ res.status, @tagName(req.method), req.address, req.url.path });
     try action(self, req, res);
 }
 

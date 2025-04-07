@@ -292,6 +292,10 @@ newExpenseForm pageModel =
                     ]
                     []
                 ]
+            , div [ class "d-grid gap-2 mx-auto mt-3" ]
+                [ button [ type_ "button", class "btn btn-primary" ] [ text "Add expense" ]
+                , button [ type_ "button", class "btn btn-secondary" ] [ text "Cancel" ]
+                ]
             ]
 
 

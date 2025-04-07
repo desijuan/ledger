@@ -10,9 +10,19 @@ pub const std_options = std.Options{
     .log_level = .info,
 };
 
+var server_instance: ?*httpz.Server(*const Handler) = null;
+
+fn shutdown(_: c_int) callconv(.C) void {
+    if (server_instance) |server| {
+        std.log.info("Server shutting down", .{});
+        server_instance = null;
+        server.stop();
+    }
+}
+
 pub fn main() !void {
     var gpa_inst = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
-    defer std.log.info("gpa: {}", .{gpa_inst.deinit()});
+    defer std.log.debug("gpa: {}", .{gpa_inst.deinit()});
 
     const gpa = gpa_inst.allocator();
 
@@ -73,7 +83,18 @@ pub fn main() !void {
     group_router.get("/:group_id", Handler.groupOverview, .{});
     group_router.post("/:group_id/new-expense", Handler.newExpense, .{});
 
+    std.posix.sigaction(std.posix.SIG.INT, &.{
+        .handler = .{ .handler = shutdown },
+        .mask = std.posix.empty_sigset,
+        .flags = 0,
+    }, null);
+    std.posix.sigaction(std.posix.SIG.TERM, &.{
+        .handler = .{ .handler = shutdown },
+        .mask = std.posix.empty_sigset,
+        .flags = 0,
+    }, null);
+
     std.log.info("Server listening on port {d}", .{PORT});
+    server_instance = &server;
     try server.listen();
-    defer server.stop();
 }

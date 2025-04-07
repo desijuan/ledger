@@ -112,13 +112,8 @@ pub fn groupOverview(self: *const Self, req: *httpz.Request, res: *httpz.Respons
     const group_id_hex: []const u8 = req.param("group_id") orelse return error.NoGroupId;
     const group_id: u32 = try std.fmt.parseInt(u32, group_id_hex, 16);
 
-    const groupInfo: *const GroupInfo = try self.db.getGroupInfo(res.arena, group_id) orelse return {
-        res.status = 200;
-        try res.json(.{
-            .success = false,
-            .msg = "Group Not Found",
-        }, .{});
-    };
+    const groupInfo: *const GroupInfo = try self.db.getGroupInfo(res.arena, group_id) orelse
+        return notFound(self, req, res);
     defer {
         res.arena.free(groupInfo.name);
         res.arena.free(groupInfo.description);

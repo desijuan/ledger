@@ -21,6 +21,10 @@ fn shutdown(_: c_int) callconv(.C) void {
 }
 
 pub fn main() !void {
+    if (comptime @import("builtin").os.tag == .windows) {
+        @compileError("Using Windows, shame on you!");
+    }
+
     var gpa_inst = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
     defer std.log.debug("gpa: {}", .{gpa_inst.deinit()});
 

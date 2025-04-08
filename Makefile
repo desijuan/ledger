@@ -1,18 +1,17 @@
-default: debug
-
-BIN := ledger
-OUT_DIR := zig-out/bin
-
 OPT_ENUM := Debug ReleaseSafe ReleaseFast ReleaseSmall
+
 OPTIMIZE ?= Debug
 ifeq ($(filter $(OPTIMIZE),$(OPT_ENUM)),)
 $(error Invalid option: '$(OPTIMIZE)')
 endif
 
+BIN := ledger
+OUT_DIR := zig-out/bin
+
 $(OUT_DIR)/$(BIN):
 	zig build -Doptimize=$(OPTIMIZE) --summary all
 
-run: $(OUT_DIR)/$(BIN)
+run: $(OUT_DIR)/$(BIN) frontend
 	$<
 
 debug: OPTIMIZE := Debug
@@ -25,6 +24,6 @@ clean:
 	rm -rf .zig-cache zig-out
 
 frontend:
-	$(MAKE) -C frontend install
+	$(MAKE) -C frontend release
 
-.PHONY: default run debug release clean frontend
+.PHONY: $(OUT_DIR)/$(BIN) run debug release clean frontend

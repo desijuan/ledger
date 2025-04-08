@@ -27,8 +27,7 @@ run: public/$(APP)
 clean:
 	rm -rf elm-stuff $(APP) public/$(APP)
 
-install:
-	@$(MAKE) --no-print-directory clean $(APP) MODE=OPTIMIZE
-	cp $(APP) public/
+release:
+	@$(MAKE) --no-print-directory public/$(APP) MODE=OPTIMIZE
 
-PHONY: run clean install
+PHONY: run clean release

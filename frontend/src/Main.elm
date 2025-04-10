@@ -13,7 +13,7 @@ import Json.Encode as Encode
 import NewExpense exposing (Tab(..))
 import NewGroup exposing (Status(..))
 import Url exposing (Url)
-import Url.Parser as Parser exposing ((</>), Parser, s, string)
+import Url.Parser as Parser exposing ((</>), Parser, string)
 
 
 encodeMsgPage : Msg -> Page -> String
@@ -129,27 +129,27 @@ pageParser =
     Parser.s "app"
         </> Parser.oneOf
                 [ Parser.map ( Home, Cmd.none ) Parser.top
-                , Parser.map ( NewGroup <| NewGroup.Model FillingForm "" "" [] "", Cmd.none ) (s "new-group")
+                , Parser.map ( NewGroup <| NewGroup.Model FillingForm "" "" [] "", Cmd.none ) (Parser.s "new-group")
                 , Parser.map
                     (\id ->
-                        ( GroupOverview <| GroupOverview.Loading id
+                        ( GroupOverview <| GroupOverview.Model GroupOverview.Loading (Common.Group "" "" "" <| Array.fromList []) []
                         , Http.get
                             { url = "http://localhost:5882/group/" ++ id
-                            , expect = Http.expectJson (GroupOverviewMsg << GroupOverview.GotServerResponse) groupOverviewApiResponseDecoder
+                            , expect = Http.expectJson (GroupOverviewMsg << GroupOverview.GotGroupOverviewApiResponse) groupOverviewApiResponseDecoder
                             }
                         )
                     )
-                    (Parser.string </> s "group-overview")
+                    (Parser.string </> Parser.s "group-overview")
                 , Parser.map
                     (\id ->
-                        ( NewExpense <| NewExpense.Loading id
+                        ( NewExpense <| NewExpense.Model NewExpense.Loading NewExpense.MoneyGiven "" (Array.fromList []) -1 -1 0 "" ""
                         , Http.get
                             { url = "http://localhost:5882/group/" ++ id
-                            , expect = Http.expectJson (NewExpenseMsg << NewExpense.GotServerResponse) groupOverviewApiResponseDecoder
+                            , expect = Http.expectJson (NewExpenseMsg << NewExpense.GotGroupOverviewApiResponse) groupOverviewApiResponseDecoder
                             }
                         )
                     )
-                    (Parser.string </> s "new-expense")
+                    (Parser.string </> Parser.s "new-expense")
                 ]
 
 
@@ -159,21 +159,6 @@ urlToPageCmd url =
         |> Maybe.withDefault ( NotFound, Cmd.none )
 
 
-groupIdParser : Parser (String -> a) a
-groupIdParser =
-    Parser.s "app"
-        </> Parser.oneOf
-                [ Parser.map identity (string </> s "group-overview")
-                , Parser.map identity (string </> s "new-expense")
-                ]
-
-
-urlToGroupId : Url -> String
-urlToGroupId url =
-    Parser.parse groupIdParser url
-        |> Maybe.withDefault ""
-
-
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url key =
     let
@@ -181,6 +166,21 @@ init _ url key =
             urlToPageCmd url
     in
     ( Model key url page, cmd )
+
+
+groupIdParser : Parser (String -> a) a
+groupIdParser =
+    Parser.s "app"
+        </> string
+        </> Parser.oneOf
+                [ Parser.s "group-overview"
+                , Parser.s "new-expense"
+                ]
+
+
+urlToGroupId : Url -> Maybe String
+urlToGroupId url =
+    Parser.parse groupIdParser url
 
 
 showErrorPage : Msg -> Model -> ( Model, Cmd Msg )
@@ -237,7 +237,7 @@ updateGroupOverview msg model groupOverviewModel =
         GroupOverviewMsg groupOverviewMsg ->
             case groupOverviewMsg of
                 GroupOverview.ClickedNewExpense ->
-                    case Parser.parse groupIdParser model.url of
+                    case urlToGroupId model.url of
                         Nothing ->
                             ( { model | page = Error }, logToConsole <| "Error: Unable to parse groupId from url: " ++ model.url.path )
 
@@ -260,10 +260,10 @@ updateNewGroup msg model newGroupModel =
     case msg of
         NewGroupMsg newGroupMsg ->
             case newGroupMsg of
-                NewGroup.GotServerResponse (Err error) ->
+                NewGroup.GotCreateGroupResponse (Err error) ->
                     ( { model | page = Error }, logToConsole <| "Error: " ++ httpErrorToString error )
 
-                NewGroup.GotServerResponse (Ok response) ->
+                NewGroup.GotCreateGroupResponse (Ok response) ->
                     ( model, Nav.pushUrl model.key <| "/app/" ++ response.groupId ++ "/group-overview" )
 
                 _ ->
@@ -283,7 +283,7 @@ updateNewExpense msg model newExpenseModel =
         NewExpenseMsg newExpenseMsg ->
             case newExpenseMsg of
                 NewExpense.ClickedCancelBtn ->
-                    case Parser.parse groupIdParser model.url of
+                    case urlToGroupId model.url of
                         Nothing ->
                             ( { model | page = Error }, logToConsole <| "Error: Unable to parse groupId from url: " ++ model.url.path )
 

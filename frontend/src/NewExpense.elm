@@ -1,4 +1,4 @@
-module NewExpense exposing (Model(..), Msg(..), Tab(..), msgToString, update, view)
+module NewExpense exposing (Model, Msg(..), Status(..), Tab(..), msgToString, update, view)
 
 import Array exposing (Array)
 import Browser
@@ -34,8 +34,16 @@ type alias Member =
     { id : Int, name : String }
 
 
-type alias PageModel =
-    { activeTab : Tab
+type Status
+    = Loading
+    | FillingForm
+    | AwaitingServerResponse
+    | Error String
+
+
+type alias Model =
+    { status : Status
+    , activeTab : Tab
     , groupName : String
     , members : Array Member
     , from : Int
@@ -44,12 +52,6 @@ type alias PageModel =
     , description : String
     , timestamp : String
     }
-
-
-type Model
-    = Loading String
-    | Loaded PageModel
-    | Error
 
 
 type Msg
@@ -61,7 +63,7 @@ type Msg
     | SelectedTo Int
     | ClickedAddExpenseBtn
     | ClickedCancelBtn
-    | GotServerResponse (Result Http.Error GroupOverviewApiResponse)
+    | GotGroupOverviewApiResponse (Result Http.Error GroupOverviewApiResponse)
 
 
 msgToString : Msg -> String
@@ -91,7 +93,7 @@ msgToString msg =
         ClickedCancelBtn ->
             "ClickedCancelBtn"
 
-        GotServerResponse result ->
+        GotGroupOverviewApiResponse result ->
             let
                 response =
                     case result of
@@ -101,25 +103,26 @@ msgToString msg =
                         Ok _ ->
                             "Ok"
             in
-            "GotServerResponse " ++ response
+            "GotGroupOverviewApiResponse " ++ response
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case model of
-        Loading _ ->
+    case model.status of
+        Loading ->
             case msg of
-                GotServerResponse (Err error) ->
-                    ( Error, logToConsole <| "Error: " ++ httpErrorToString error )
+                GotGroupOverviewApiResponse (Err error) ->
+                    ( { model | status = Error <| httpErrorToString error }, Cmd.none )
 
-                GotServerResponse (Ok response) ->
+                GotGroupOverviewApiResponse (Ok response) ->
                     let
-                        pageModel =
+                        newModel =
                             let
                                 board =
                                     response.groupBoard
                             in
-                            { activeTab = MoneyGiven
+                            { status = FillingForm
+                            , activeTab = MoneyGiven
                             , groupName = board.name
                             , members = Array.fromList board.members
                             , from = 1
@@ -129,47 +132,49 @@ update msg model =
                             , timestamp = ""
                             }
                     in
-                    ( Loaded pageModel, Cmd.none )
+                    ( newModel, Cmd.none )
 
                 _ ->
-                    ( Error, Cmd.none )
+                    ( { model | status = Error "TODO: fill" }, Cmd.none )
 
-        Loaded pageModel ->
+        FillingForm ->
             case msg of
                 UpdateAmount value ->
-                    ( Loaded { pageModel | amount = value }, Cmd.none )
+                    ( { model | amount = value }, Cmd.none )
 
                 UpdateDescription value ->
-                    ( Loaded { pageModel | description = value }, Cmd.none )
+                    ( { model | description = value }, Cmd.none )
 
                 UpdateTimestamp value ->
-                    ( Loaded { pageModel | timestamp = value }, Cmd.none )
+                    ( { model | timestamp = value }, Cmd.none )
 
                 ClickedTab tab ->
-                    ( Loaded { pageModel | activeTab = tab }, Cmd.none )
+                    ( { model | activeTab = tab }, Cmd.none )
 
                 SelectedFrom memberId ->
-                    ( Loaded
-                        { pageModel
-                            | from = memberId
-                            , to =
-                                if pageModel.to == memberId then
-                                    -1
+                    ( { model
+                        | from = memberId
+                        , to =
+                            if model.to == memberId then
+                                -1
 
-                                else
-                                    pageModel.to
-                        }
+                            else
+                                model.to
+                      }
                     , Cmd.none
                     )
 
                 SelectedTo memberId ->
-                    ( Loaded { pageModel | to = memberId }, Cmd.none )
+                    ( { model | to = memberId }, Cmd.none )
 
                 _ ->
-                    ( Error, Cmd.none )
+                    ( { model | status = Error "TODO" }, Cmd.none )
 
-        Error ->
-            ( Error, Cmd.none )
+        AwaitingServerResponse ->
+            ( model, Cmd.none )
+
+        Error _ ->
+            ( model, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -233,91 +238,94 @@ stringToInt str =
             n
 
 
-newExpenseForm : PageModel -> List (Html Msg)
-newExpenseForm pageModel =
-    case pageModel.activeTab of
-        Income ->
-            [ text "Not implemented yet" ]
+newExpenseForm : Model -> List (Html Msg)
+newExpenseForm model =
+    case model.status of
+        Error errorMsg ->
+            [ text <| "Error: " ++ errorMsg ]
 
-        Expense ->
-            [ text "Not implemented yet" ]
+        AwaitingServerResponse ->
+            [ text "Loading... " ]
 
-        MoneyGiven ->
-            let
-                membersList =
-                    case List.tail <| Array.toList pageModel.members of
-                        Nothing ->
-                            []
+        Loading ->
+            [ text "Loading... " ]
 
-                        Just list ->
-                            list
-            in
-            [ div [ class "row g-3 align-items-center" ]
-                [ div [ class "col-auto" ]
-                    [ select [ class "form-select", onInput (SelectedFrom << stringToInt) ]
-                        (List.map (mapOption pageModel.from) membersList)
-                    ]
-                , div [ class "col" ]
-                    [ p [ class "col-form-label" ] [ text "gave money." ]
-                    ]
-                ]
-            , div [ class "form-group mt-3" ]
-                (label [ class "form-label", for "to" ] [ text "To whom?" ]
-                    :: List.map (mapRadio pageModel.to) (List.filter (\member -> member.id /= pageModel.from) membersList)
-                )
-            , div [ class "form-group mt-3" ]
-                [ label [ class "form-label", for "amount" ] [ text "How much?" ]
-                , div [ class "input-group" ]
-                    [ span [ class "input-group-text" ] [ text "$" ]
-                    , input
-                        [ type_ "number"
-                        , class "form-control"
-                        , value <| String.fromInt pageModel.amount
-                        , onInput (UpdateAmount << stringToInt)
-                        , Html.Attributes.min "0"
-                        , name "amount"
+        FillingForm ->
+            case model.activeTab of
+                Income ->
+                    [ text "Not implemented yet" ]
+
+                Expense ->
+                    [ text "Not implemented yet" ]
+
+                MoneyGiven ->
+                    let
+                        membersList =
+                            case List.tail <| Array.toList model.members of
+                                Nothing ->
+                                    []
+
+                                Just list ->
+                                    list
+                    in
+                    [ div [ class "row g-3 align-items-center" ]
+                        [ div [ class "col-auto" ]
+                            [ select [ class "form-select", onInput (SelectedFrom << stringToInt) ]
+                                (List.map (mapOption model.from) membersList)
+                            ]
+                        , div [ class "col" ]
+                            [ p [ class "col-form-label" ] [ text "gave money." ]
+                            ]
                         ]
-                        []
+                    , div [ class "form-group mt-3" ]
+                        (label [ class "form-label", for "to" ] [ text "To whom?" ]
+                            :: List.map (mapRadio model.to) (List.filter (\member -> member.id /= model.from) membersList)
+                        )
+                    , div [ class "form-group mt-3" ]
+                        [ label [ class "form-label", for "amount" ] [ text "How much?" ]
+                        , div [ class "input-group" ]
+                            [ span [ class "input-group-text" ] [ text "$" ]
+                            , input
+                                [ type_ "number"
+                                , class "form-control"
+                                , value <| String.fromInt model.amount
+                                , onInput (UpdateAmount << stringToInt)
+                                , Html.Attributes.min "0"
+                                , name "amount"
+                                ]
+                                []
+                            ]
+                        ]
+                    , div [ class "form-group mt-3" ]
+                        [ label [ class "form-label", for "description" ] [ text "What for?" ]
+                        , input
+                            [ type_ "text"
+                            , class "form-control"
+                            , value model.description
+                            , onInput UpdateDescription
+                            ]
+                            []
+                        ]
+                    , div [ class "form-group mt-3" ]
+                        [ label [ class "form-label", for "timestamp" ] [ text "When?" ]
+                        , input
+                            [ type_ "date"
+                            , class "form-control"
+                            , value model.timestamp
+                            , onInput UpdateTimestamp
+                            ]
+                            []
+                        ]
+                    , div [ class "d-grid gap-2 mx-auto mt-3" ]
+                        [ button [ type_ "button", class "btn btn-primary" ] [ text "Add expense" ]
+                        , button [ type_ "button", class "btn btn-secondary", onClick ClickedCancelBtn ] [ text "Cancel" ]
+                        ]
                     ]
-                ]
-            , div [ class "form-group mt-3" ]
-                [ label [ class "form-label", for "description" ] [ text "What for?" ]
-                , input
-                    [ type_ "text"
-                    , class "form-control"
-                    , value pageModel.description
-                    , onInput UpdateDescription
-                    ]
-                    []
-                ]
-            , div [ class "form-group mt-3" ]
-                [ label [ class "form-label", for "timestamp" ] [ text "When?" ]
-                , input
-                    [ type_ "date"
-                    , class "form-control"
-                    , value pageModel.timestamp
-                    , onInput UpdateTimestamp
-                    ]
-                    []
-                ]
-            , div [ class "d-grid gap-2 mx-auto mt-3" ]
-                [ button [ type_ "button", class "btn btn-primary" ] [ text "Add expense" ]
-                , button [ type_ "button", class "btn btn-secondary", onClick ClickedCancelBtn ] [ text "Cancel" ]
-                ]
-            ]
 
 
 newExpense : Model -> List (Html Msg)
 newExpense model =
-    case model of
-        Loading groupId ->
-            [ text <| "Loading " ++ groupId ]
-
-        Loaded pageModel ->
-            newExpenseTabs pageModel.activeTab :: newExpenseForm pageModel
-
-        Error ->
-            [ text "Error" ]
+    newExpenseTabs model.activeTab :: newExpenseForm model
 
 
 view : Model -> Html Msg

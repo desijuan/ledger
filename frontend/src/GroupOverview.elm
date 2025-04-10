@@ -1,4 +1,4 @@
-module GroupOverview exposing (Model(..), Msg(..), msgToString, update, view)
+module GroupOverview exposing (Model, Msg(..), Status(..), msgToString, update, view)
 
 import Array exposing (Array)
 import Common exposing (Group, GroupOverviewApiResponse, Member, Tr, httpErrorToString, logToConsole)
@@ -8,19 +8,22 @@ import Html.Events exposing (onClick)
 import Http
 
 
-type alias GroupInfo =
-    { group : Group, trs : List Tr }
-
-
-type Model
-    = Loading String
-    | Loaded GroupInfo
+type Status
+    = Loading
+    | Loaded
     | Error
+
+
+type alias Model =
+    { status : Status
+    , group : Group
+    , trs : List Tr
+    }
 
 
 type Msg
     = ClickedNewExpense
-    | GotServerResponse (Result Http.Error GroupOverviewApiResponse)
+    | GotGroupOverviewApiResponse (Result Http.Error GroupOverviewApiResponse)
 
 
 msgToString : Msg -> String
@@ -29,7 +32,7 @@ msgToString msg =
         ClickedNewExpense ->
             "ClickedNewExpense"
 
-        GotServerResponse result ->
+        GotGroupOverviewApiResponse result ->
             let
                 response =
                     case result of
@@ -39,23 +42,24 @@ msgToString msg =
                         Ok _ ->
                             "Ok"
             in
-            "GotServerResponse " ++ response
+            "GotGroupOverviewApiResponse " ++ response
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GotServerResponse (Err error) ->
-            ( Error, logToConsole <| "Error: " ++ httpErrorToString error )
+        GotGroupOverviewApiResponse (Err error) ->
+            ( { model | status = Error }, logToConsole <| "Error: " ++ httpErrorToString error )
 
-        GotServerResponse (Ok response) ->
+        GotGroupOverviewApiResponse (Ok response) ->
             let
-                groupInfo =
+                newModel =
                     let
                         board =
                             response.groupBoard
                     in
-                    { group =
+                    { status = Loaded
+                    , group =
                         { id = board.groupId
                         , name = board.name
                         , description = board.description
@@ -64,7 +68,7 @@ update msg model =
                     , trs = []
                     }
             in
-            ( Loaded groupInfo, Cmd.none )
+            ( newModel, Cmd.none )
 
         ClickedNewExpense ->
             ( model, Cmd.none )
@@ -107,12 +111,15 @@ mapTr members tr =
 
 groupOverviewContent : Model -> List (Html Msg)
 groupOverviewContent model =
-    case model of
-        Loading groupId ->
-            [ text <| "Loading " ++ groupId ]
+    case model.status of
+        Error ->
+            [ text "Error" ]
 
-        Loaded groupInfo ->
-            [ h3 [ class "text-center" ] [ text groupInfo.group.name ]
+        Loading ->
+            [ text "Loading... " ]
+
+        Loaded ->
+            [ h3 [ class "text-center" ] [ text model.group.name ]
             , div [ class "d-flex align-items-center justify-content-between" ]
                 [ h4 [] [ text "Expenses" ]
                 , button
@@ -122,19 +129,16 @@ groupOverviewContent model =
                     ]
                     [ text "New Expense" ]
                 ]
-            , if List.length groupInfo.trs == 0 then
+            , if List.length model.trs == 0 then
                 span [] [ text "No expenses yet" ]
 
               else
                 ul [ class "list-group list-group-flush" ]
                     (List.map
-                        (mapTr groupInfo.group.members)
-                        groupInfo.trs
+                        (mapTr model.group.members)
+                        model.trs
                     )
             ]
-
-        Error ->
-            [ text "Error" ]
 
 
 view : Model -> Html Msg

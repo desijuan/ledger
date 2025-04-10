@@ -49,7 +49,7 @@ type Msg
     | ClickedAddMember
     | ClickedClearMembers
     | ClickedDone
-    | GotServerResponse (Result Http.Error CreateGroupResponse)
+    | GotCreateGroupResponse (Result Http.Error CreateGroupResponse)
 
 
 msgToString : Msg -> String
@@ -85,7 +85,7 @@ msgToString msg =
         ClickedDone ->
             "ClickedDone"
 
-        GotServerResponse result ->
+        GotCreateGroupResponse result ->
             let
                 response =
                     case result of
@@ -95,7 +95,7 @@ msgToString msg =
                         Ok _ ->
                             "Ok"
             in
-            "GotServerResponse " ++ response
+            "GotCreateGroupResponse " ++ response
 
 
 focusElement : String -> Cmd Msg
@@ -203,11 +203,11 @@ update msg model =
                 , Http.post
                     { url = "http://localhost:5882/new-group"
                     , body = Http.jsonBody (encodeGroup newGroup)
-                    , expect = Http.expectJson GotServerResponse createGroupResponseDecoder
+                    , expect = Http.expectJson GotCreateGroupResponse createGroupResponseDecoder
                     }
                 )
 
-        GotServerResponse _ ->
+        GotCreateGroupResponse _ ->
             ( model, Cmd.none )
 
 

@@ -134,7 +134,7 @@ pageParser =
                     (\id ->
                         ( GroupOverview <| GroupOverview.Model GroupOverview.Loading (Common.Group "" "" "" <| Array.fromList []) []
                         , Http.get
-                            { url = "http://localhost:5882/group/" ++ id
+                            { url = "/group/" ++ id
                             , expect = Http.expectJson (GroupOverviewMsg << GroupOverview.GotGroupOverviewApiResponse) groupOverviewApiResponseDecoder
                             }
                         )
@@ -144,7 +144,7 @@ pageParser =
                     (\id ->
                         ( NewExpense <| NewExpense.Model NewExpense.Loading NewExpense.MoneyGiven "" (Array.fromList []) -1 -1 0 "" ""
                         , Http.get
-                            { url = "http://localhost:5882/group/" ++ id
+                            { url = "/group/" ++ id
                             , expect = Http.expectJson (NewExpenseMsg << NewExpense.GotGroupOverviewApiResponse) groupOverviewApiResponseDecoder
                             }
                         )

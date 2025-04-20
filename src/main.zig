@@ -5,6 +5,7 @@ const DB = @import("db/db.zig");
 const Handler = @import("server/Handler.zig");
 const Logger = @import("server/Logger.zig");
 
+const ADDRESS = "0.0.0.0";
 const PORT = 5882;
 
 pub const std_options = std.Options{
@@ -63,7 +64,7 @@ pub fn main() !void {
         .js_app = js_app,
     };
 
-    var server = try httpz.Server(*const Handler).init(gpa, .{ .port = PORT }, &handler);
+    var server = try httpz.Server(*const Handler).init(gpa, .{ .port = PORT, .address = ADDRESS }, &handler);
     defer server.deinit();
 
     const cors = try server.middleware(httpz.middleware.Cors, .{
@@ -101,7 +102,7 @@ pub fn main() !void {
         .flags = 0,
     }, null);
 
-    std.log.info("Server listening on port {d}", .{PORT});
+    std.log.info("Server listening on {?s}:{?d}", .{ server.config.address, server.config.port });
     server_instance = &server;
     try server.listen();
 }

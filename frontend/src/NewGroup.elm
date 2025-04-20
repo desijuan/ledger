@@ -201,7 +201,7 @@ update msg model =
                 in
                 ( { model | status = AwaitingServerResponse }
                 , Http.post
-                    { url = "http://localhost:5882/new-group"
+                    { url = "/new-group"
                     , body = Http.jsonBody (encodeGroup newGroup)
                     , expect = Http.expectJson GotCreateGroupResponse createGroupResponseDecoder
                     }

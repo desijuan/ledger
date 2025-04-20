@@ -3,7 +3,7 @@ module NewExpense exposing (Model, Msg(..), Status(..), Tab(..), msgToString, up
 import Array exposing (Array)
 import Browser
 import Browser.Dom as Dom
-import Common exposing (GroupOverviewApiResponse, Tr, httpErrorToString, logToConsole)
+import Common exposing (GroupOverviewApiResponse, Tr, domErrorToString, httpErrorToString, logToConsole)
 import Html exposing (Attribute, Html, button, div, h1, h3, h4, input, label, li, nav, option, p, select, span, text, ul)
 import Html.Attributes exposing (checked, class, classList, for, id, name, selected, type_, value)
 import Html.Events exposing (keyCode, on, onClick, onInput)
@@ -96,8 +96,7 @@ type alias Model =
 
 
 type Msg
-    = NoOp
-    | UpdateAmount Int
+    = UpdateAmount Int
     | UpdateDescription String
     | UpdateTimestamp String
     | ClickedTab Tab
@@ -105,6 +104,7 @@ type Msg
     | SelectedTo Int
     | ClickedAddExpenseBtn
     | ClickedCancelBtn
+    | Focus (Result Dom.Error ())
     | GotGroupOverviewApiResponse (Result Http.Error GroupOverviewApiResponse)
     | GotCreateExpenseResponse (Result Http.Error CreateExpenseResponse)
 
@@ -112,9 +112,6 @@ type Msg
 msgToString : Msg -> String
 msgToString msg =
     case msg of
-        NoOp ->
-            "NoOp"
-
         UpdateAmount n ->
             "UpdateAmount " ++ String.fromInt n
 
@@ -161,12 +158,24 @@ msgToString msg =
                         Ok _ ->
                             "Ok"
             in
-            "GotCreateExpenseResponse" ++ response
+            "GotCreateExpenseResponse " ++ response
+
+        Focus result ->
+            let
+                response =
+                    case result of
+                        Err error ->
+                            domErrorToString error
+
+                        Ok _ ->
+                            "Ok"
+            in
+            "Focus " ++ response
 
 
 focusElement : String -> Cmd Msg
 focusElement htmlId =
-    Task.attempt (\_ -> NoOp) (Dom.focus htmlId)
+    Task.attempt Focus (Dom.focus htmlId)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -246,6 +255,9 @@ update msg model =
                             else if model.amount <= 0 then
                                 ( model, focusElement "expense-amount" )
 
+                            else if String.length model.description == 0 then
+                                ( model, focusElement "expense-description" )
+
                             else if String.length model.timestamp == 0 then
                                 ( model, focusElement "expense-date" )
 
@@ -265,7 +277,14 @@ update msg model =
                         Income ->
                             ( { model | status = Error "TODO 2" }, Cmd.none )
 
-                NoOp ->
+                Focus (Err error) ->
+                    let
+                        errorStr =
+                            domErrorToString error
+                    in
+                    ( { model | status = Error errorStr }, logToConsole <| "Error: " ++ errorStr )
+
+                Focus (Ok _) ->
                     ( model, Cmd.none )
 
                 _ ->
@@ -378,16 +397,17 @@ newExpenseForm model =
                             [ p [ class "col-form-label" ] [ text "gave money." ]
                             ]
                         ]
-                    , div [ class "form-group mt-3" ]
-                        (label [ id "expense-to", class "form-label", for "to" ] [ text "To whom?" ]
+                    , div [ id "expense-to", class "form-group mt-3" ]
+                        (label [ class "form-label" ] [ text "To whom?" ]
                             :: List.map (mapRadio model.to) (List.filter (\member -> member.id /= model.from) membersList)
                         )
                     , div [ class "form-group mt-3" ]
-                        [ label [ id "expense-amount", class "form-label", for "amount" ] [ text "How much?" ]
+                        [ label [ class "form-label", for "expense-amount" ] [ text "How much?" ]
                         , div [ class "input-group" ]
                             [ span [ class "input-group-text" ] [ text "$" ]
                             , input
                                 [ type_ "number"
+                                , id "expense-amount"
                                 , class "form-control"
                                 , value <| String.fromInt model.amount
                                 , onInput (UpdateAmount << stringToInt)
@@ -401,6 +421,7 @@ newExpenseForm model =
                         [ label [ class "form-label", for "description" ] [ text "What for?" ]
                         , input
                             [ type_ "text"
+                            , id "expense-description"
                             , class "form-control"
                             , value model.description
                             , onInput UpdateDescription
@@ -408,9 +429,10 @@ newExpenseForm model =
                             []
                         ]
                     , div [ class "form-group mt-3" ]
-                        [ label [ id "expense-date", class "form-label", for "timestamp" ] [ text "When?" ]
+                        [ label [ class "form-label", for "timestamp" ] [ text "When?" ]
                         , input
                             [ type_ "date"
+                            , id "expense-date"
                             , class "form-control"
                             , value model.timestamp
                             , onInput UpdateTimestamp

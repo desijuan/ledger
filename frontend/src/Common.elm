@@ -4,12 +4,15 @@ port module Common exposing
     , Member
     , Tr
     , decodeGroupOverviewApiResponse
+    , domErrorToString
     , groupOverviewApiResponseDecoder
     , httpErrorToString
     , logToConsole
     )
 
 import Array exposing (Array)
+import Browser
+import Browser.Dom as Dom
 import Http
 import Json.Decode exposing (Decoder, bool, int, list, string, succeed)
 import Json.Decode.Pipeline exposing (required)
@@ -47,6 +50,13 @@ httpErrorToString error =
 
         Http.BadBody message ->
             "Bad body: " ++ message
+
+
+domErrorToString : Dom.Error -> String
+domErrorToString error =
+    case error of
+        Dom.NotFound id ->
+            "Dom NotFound: " ++ id
 
 
 type alias GroupOverviewApiResponse =

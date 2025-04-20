@@ -26,4 +26,7 @@ clean:
 frontend:
 	$(MAKE) -C frontend release
 
-.PHONY: $(OUT_DIR)/$(BIN) run debug release clean frontend
+httpz-update:
+	zig fetch --save git+https://github.com/karlseguin/http.zig#master
+
+.PHONY: $(OUT_DIR)/$(BIN) run debug release clean frontend httpz-update

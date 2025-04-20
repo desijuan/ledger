@@ -53,14 +53,14 @@ pub fn main() !void {
     const stylesheet: []const u8 = try utils.readFile(gpa, "frontend/public/styles.css");
     defer gpa.free(stylesheet);
 
-    const js_src: []const u8 = try utils.readFile(gpa, "frontend/public/app.js");
-    defer gpa.free(js_src);
+    const js_app: []const u8 = try utils.readFile(gpa, "frontend/public/app.js");
+    defer gpa.free(js_app);
 
     const handler = Handler{
         .db = &db,
         .index = index,
         .stylesheet = stylesheet,
-        .js_src = js_src,
+        .js_app = js_app,
     };
 
     var server = try httpz.Server(*const Handler).init(gpa, .{ .port = PORT }, &handler);
@@ -79,7 +79,7 @@ pub fn main() !void {
 
     var public_router = router.group("/public", .{});
     public_router.get("/styles.css", Handler.static(.CSS, "stylesheet"), .{});
-    public_router.get("/app.js", Handler.static(.JS, "js_src"), .{});
+    public_router.get("/app.js", Handler.static(.JS, "js_app"), .{});
 
     var app_router = router.group("/app", .{});
     app_router.get("/*", Handler.static(.HTML, "index"), .{});

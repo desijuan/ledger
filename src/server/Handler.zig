@@ -9,7 +9,7 @@ const Tr = DB.Tr;
 db: *const DB,
 index: []const u8,
 stylesheet: []const u8,
-js_src: []const u8,
+js_app: []const u8,
 
 const Self = @This();
 

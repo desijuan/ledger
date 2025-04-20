@@ -3,6 +3,7 @@ const httpz = @import("httpz");
 const utils = @import("utils.zig");
 const DB = @import("db/db.zig");
 const Handler = @import("server/Handler.zig");
+const Logger = @import("server/Logger.zig");
 
 const PORT = 5882;
 
@@ -72,7 +73,9 @@ pub fn main() !void {
         .max_age = "300",
     });
 
-    var router = try server.router(.{ .middlewares = &.{cors} });
+    const logger = try server.middleware(Logger, .{});
+
+    var router = try server.router(.{ .middlewares = &.{ logger, cors } });
 
     var public_router = router.group("/public", .{});
     public_router.get("/styles.css", Handler.static(.CSS, "stylesheet"), .{});

@@ -5,8 +5,8 @@ const DB = @import("db/db.zig");
 const Handler = @import("server/Handler.zig");
 const Logger = @import("server/Logger.zig");
 
-const ADDRESS = "0.0.0.0";
-const PORT = 5882;
+const DEFAULT_ADDR = "0.0.0.0";
+const DEFAULT_PORT = 5882;
 
 pub const std_options = std.Options{
     .log_level = .info,
@@ -26,6 +26,12 @@ pub fn main() !void {
     if (comptime @import("builtin").os.tag == .windows) {
         @compileError("Using Windows, shame on you!");
     }
+
+    const ADDRESS: []const u8 = std.posix.getenv("APP_ADDRESS") orelse DEFAULT_ADDR;
+    const PORT: u16 = blk: {
+        const port_str = std.posix.getenv("APP_PORT") orelse break :blk DEFAULT_PORT;
+        break :blk try std.fmt.parseInt(u16, port_str, 10);
+    };
 
     var gpa_inst = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
     defer std.log.debug("gpa: {}", .{gpa_inst.deinit()});

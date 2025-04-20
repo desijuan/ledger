@@ -27,7 +27,7 @@ type alias Member =
 
 
 type alias Tr =
-    { id : Int, from_id : Int, to_id : Int, amount : Int, description : String }
+    { id : Int, from_id : Int, to_id : Int, amount : Int, description : String, timestamp : String }
 
 
 httpErrorToString : Http.Error -> String
@@ -61,7 +61,7 @@ type alias GroupBoard =
     , description : String
     , createdAt : String
     , members : List Member
-    , trs : List Transaction
+    , trs : List Tr
     }
 
 
@@ -90,17 +90,15 @@ memberDecoder =
         |> required "name" string
 
 
-type alias Transaction =
-    { -- Define fields based on your needs
-      -- For now, keeping it as an empty type since "trs" is empty in your example
-    }
-
-
-transactionDecoder : Decoder Transaction
+transactionDecoder : Decoder Tr
 transactionDecoder =
-    -- Define the decoder based on your Transaction type
-    -- For now, just creating an empty object decoder
-    succeed {}
+    succeed Tr
+        |> required "tr_id" int
+        |> required "from_id" int
+        |> required "to_id" int
+        |> required "amount" int
+        |> required "description" string
+        |> required "timestamp" string
 
 
 decodeGroupOverviewApiResponse : String -> Result Json.Decode.Error GroupOverviewApiResponse

@@ -110,12 +110,6 @@ type alias Group =
     }
 
 
-type alias CreateGroupResponse =
-    { success : Bool
-    , groupId : String
-    }
-
-
 encodeGroup : Group -> Encode.Value
 encodeGroup group =
     Encode.object
@@ -123,6 +117,12 @@ encodeGroup group =
         , ( "description", Encode.string group.description )
         , ( "members", Encode.list Encode.string group.members )
         ]
+
+
+type alias CreateGroupResponse =
+    { success : Bool
+    , groupId : String
+    }
 
 
 createGroupResponseDecoder : Decoder CreateGroupResponse

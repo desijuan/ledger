@@ -65,7 +65,7 @@ update msg model =
                         , description = board.description
                         , members = Array.fromList board.members
                         }
-                    , trs = []
+                    , trs = board.trs
                     }
             in
             ( newModel, Cmd.none )

@@ -3,31 +3,71 @@ module NewExpense exposing (Model, Msg(..), Status(..), Tab(..), msgToString, up
 import Array exposing (Array)
 import Browser
 import Browser.Dom as Dom
-import Common exposing (GroupOverviewApiResponse, httpErrorToString, logToConsole)
+import Common exposing (GroupOverviewApiResponse, Tr, httpErrorToString, logToConsole)
 import Html exposing (Attribute, Html, button, div, h1, h3, h4, input, label, li, nav, option, p, select, span, text, ul)
 import Html.Attributes exposing (checked, class, classList, for, id, name, selected, type_, value)
 import Html.Events exposing (keyCode, on, onClick, onInput)
 import Http
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import Task
 
 
 type Tab
-    = Income
-    | Expense
+    = Expense
     | MoneyGiven
+    | Income
 
 
 tabToString : Tab -> String
 tabToString tab =
     case tab of
-        Income ->
-            "Income"
-
         Expense ->
             "Expense"
 
         MoneyGiven ->
             "MoneyGiven"
+
+        Income ->
+            "Income"
+
+
+type alias TrInfo =
+    { from_id : Int, to_id : Int, amount : Int, description : String, timestamp : String }
+
+
+encodeTr : TrInfo -> Encode.Value
+encodeTr tr =
+    Encode.object
+        [ ( "from_id", Encode.int tr.from_id )
+        , ( "to_id", Encode.int tr.to_id )
+        , ( "amount", Encode.int tr.amount )
+        , ( "description", Encode.string tr.description )
+        ]
+
+
+type alias CreateExpenseResponse =
+    { success : Bool
+    , tr : Tr
+    }
+
+
+trDecoder : Decoder Tr
+trDecoder =
+    Decode.map6 Tr
+        (Decode.field "tr_id" Decode.int)
+        (Decode.field "from_id" Decode.int)
+        (Decode.field "to_id" Decode.int)
+        (Decode.field "amount" Decode.int)
+        (Decode.field "description" Decode.string)
+        (Decode.field "timestamp" Decode.string)
+
+
+createExpenseResponseDecoder : Decoder CreateExpenseResponse
+createExpenseResponseDecoder =
+    Decode.map2 CreateExpenseResponse
+        (Decode.field "success" Decode.bool)
+        (Decode.field "tr" trDecoder)
 
 
 type alias Member =
@@ -44,6 +84,7 @@ type Status
 type alias Model =
     { status : Status
     , activeTab : Tab
+    , groupId : String
     , groupName : String
     , members : Array Member
     , from : Int
@@ -55,7 +96,8 @@ type alias Model =
 
 
 type Msg
-    = UpdateAmount Int
+    = NoOp
+    | UpdateAmount Int
     | UpdateDescription String
     | UpdateTimestamp String
     | ClickedTab Tab
@@ -64,11 +106,15 @@ type Msg
     | ClickedAddExpenseBtn
     | ClickedCancelBtn
     | GotGroupOverviewApiResponse (Result Http.Error GroupOverviewApiResponse)
+    | GotCreateExpenseResponse (Result Http.Error CreateExpenseResponse)
 
 
 msgToString : Msg -> String
 msgToString msg =
     case msg of
+        NoOp ->
+            "NoOp"
+
         UpdateAmount n ->
             "UpdateAmount " ++ String.fromInt n
 
@@ -105,6 +151,23 @@ msgToString msg =
             in
             "GotGroupOverviewApiResponse " ++ response
 
+        GotCreateExpenseResponse result ->
+            let
+                response =
+                    case result of
+                        Err error ->
+                            httpErrorToString error
+
+                        Ok _ ->
+                            "Ok"
+            in
+            "GotCreateExpenseResponse" ++ response
+
+
+focusElement : String -> Cmd Msg
+focusElement htmlId =
+    Task.attempt (\_ -> NoOp) (Dom.focus htmlId)
+
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -123,6 +186,7 @@ update msg model =
                             in
                             { status = FillingForm
                             , activeTab = MoneyGiven
+                            , groupId = board.groupId
                             , groupName = board.name
                             , members = Array.fromList board.members
                             , from = 1
@@ -167,8 +231,45 @@ update msg model =
                 SelectedTo memberId ->
                     ( { model | to = memberId }, Cmd.none )
 
+                ClickedAddExpenseBtn ->
+                    case model.activeTab of
+                        Expense ->
+                            ( { model | status = Error "TODO 1" }, Cmd.none )
+
+                        MoneyGiven ->
+                            if model.from <= 0 then
+                                ( model, focusElement "expense-from" )
+
+                            else if model.to <= 0 then
+                                ( model, focusElement "expense-to" )
+
+                            else if model.amount <= 0 then
+                                ( model, focusElement "expense-amount" )
+
+                            else if String.length model.timestamp == 0 then
+                                ( model, focusElement "expense-date" )
+
+                            else
+                                let
+                                    newTr =
+                                        TrInfo model.from model.to model.amount model.description model.timestamp
+                                in
+                                ( { model | status = AwaitingServerResponse }
+                                , Http.post
+                                    { url = "/group/" ++ model.groupId ++ "/new-expense"
+                                    , body = Http.jsonBody (encodeTr newTr)
+                                    , expect = Http.expectJson GotCreateExpenseResponse createExpenseResponseDecoder
+                                    }
+                                )
+
+                        Income ->
+                            ( { model | status = Error "TODO 2" }, Cmd.none )
+
+                NoOp ->
+                    ( model, Cmd.none )
+
                 _ ->
-                    ( { model | status = Error "TODO" }, Cmd.none )
+                    ( { model | status = Error ("TODO 3 " ++ msgToString msg) }, Cmd.none )
 
         AwaitingServerResponse ->
             ( model, Cmd.none )
@@ -270,7 +371,7 @@ newExpenseForm model =
                     in
                     [ div [ class "row g-3 align-items-center" ]
                         [ div [ class "col-auto" ]
-                            [ select [ class "form-select", onInput (SelectedFrom << stringToInt) ]
+                            [ select [ id "expense-from", class "form-select", onInput (SelectedFrom << stringToInt) ]
                                 (List.map (mapOption model.from) membersList)
                             ]
                         , div [ class "col" ]
@@ -278,11 +379,11 @@ newExpenseForm model =
                             ]
                         ]
                     , div [ class "form-group mt-3" ]
-                        (label [ class "form-label", for "to" ] [ text "To whom?" ]
+                        (label [ id "expense-to", class "form-label", for "to" ] [ text "To whom?" ]
                             :: List.map (mapRadio model.to) (List.filter (\member -> member.id /= model.from) membersList)
                         )
                     , div [ class "form-group mt-3" ]
-                        [ label [ class "form-label", for "amount" ] [ text "How much?" ]
+                        [ label [ id "expense-amount", class "form-label", for "amount" ] [ text "How much?" ]
                         , div [ class "input-group" ]
                             [ span [ class "input-group-text" ] [ text "$" ]
                             , input
@@ -307,7 +408,7 @@ newExpenseForm model =
                             []
                         ]
                     , div [ class "form-group mt-3" ]
-                        [ label [ class "form-label", for "timestamp" ] [ text "When?" ]
+                        [ label [ id "expense-date", class "form-label", for "timestamp" ] [ text "When?" ]
                         , input
                             [ type_ "date"
                             , class "form-control"
@@ -317,7 +418,7 @@ newExpenseForm model =
                             []
                         ]
                     , div [ class "d-grid gap-2 mx-auto mt-3" ]
-                        [ button [ type_ "button", class "btn btn-primary" ] [ text "Add expense" ]
+                        [ button [ type_ "button", class "btn btn-primary", onClick ClickedAddExpenseBtn ] [ text "Add expense" ]
                         , button [ type_ "button", class "btn btn-secondary", onClick ClickedCancelBtn ] [ text "Cancel" ]
                         ]
                     ]
